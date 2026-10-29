@@ -497,7 +497,12 @@ export default function App() {
           <div className="flex items-center gap-2">
             <span className="p-1 bg-[#E8A02C] text-[#13294B] rounded-lg text-sm">🎒</span>
             <div>
-              <h1 className="text-sm font-black tracking-tight font-display">AI深旅 DeepGo</h1>
+              <div className="flex items-center gap-1.5">
+                <h1 className="text-sm font-black tracking-tight font-display">AI深旅 DeepGo</h1>
+                <span className="text-[9px] bg-[#E8A02C]/20 text-[#E8A02C] font-mono font-bold px-1.5 py-0.5 rounded-full border border-[#E8A02C]/40">
+                  v1.1.0
+                </span>
+              </div>
               <p className="text-[9px] text-[#E8A02C]/90 font-mono tracking-wider">AI DEEP GO SMART PLANNER</p>
             </div>
           </div>
@@ -643,7 +648,10 @@ export default function App() {
                 <div className="flex items-center gap-2.5">
                   <span className="p-1.5 bg-white/10 rounded-xl">☁️</span>
                   <div>
-                    <h3 className="font-bold text-sm font-display leading-tight">雲端後端連線狀態</h3>
+                    <div className="flex items-center gap-1.5">
+                      <h3 className="font-bold text-sm font-display leading-tight">雲端後端連線狀態</h3>
+                      <span className="text-[9px] bg-white/20 text-white font-mono px-1.5 py-0.2 rounded font-medium">v1.1.0</span>
+                    </div>
                     <p className="text-[10px] text-gray-300">APK 原生連線與 API 路由設定</p>
                   </div>
                 </div>

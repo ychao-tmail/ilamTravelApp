@@ -42,8 +42,16 @@ jobs:
         cd android
         ./gradlew assembleDebug --stacktrace
 
-    - name: Upload Debug APK Artifact
+    - name: Prepare Versioned APK
+      run: |
+        VERSION=$(node -p "require('./package.json').version")
+        echo "APP_VERSION=$VERSION" >> $GITHUB_ENV
+        cp android/app/build/outputs/apk/debug/app-debug.apk android/app/build/outputs/apk/debug/deepgo-taiwan-v${VERSION}-debug.apk
+
+    - name: Upload Versioned APK Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: deepgo-taiwan-debug-apk
-        path: android/app/build/outputs/apk/debug/app-debug.apk
+        name: deepgo-taiwan-v${{ env.APP_VERSION }}-apk
+        path: |
+          android/app/build/outputs/apk/debug/deepgo-taiwan-v${{ env.APP_VERSION }}-debug.apk
+          android/app/build/outputs/apk/debug/app-debug.apk
