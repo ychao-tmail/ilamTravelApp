@@ -22,6 +22,9 @@ export interface Spot {
   county?: string;
   icon: string;
   tags?: string[];
+  lat?: number;
+  lng?: number;
+  distanceKm?: number;
 }
 
 export interface PlannerPreferences {

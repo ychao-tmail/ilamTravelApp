@@ -14,7 +14,9 @@ export const DEFAULT_SPOTS: Spot[] = [
     location: "台北市大同區",
     region: "北部",
     county: "台北市",
-    icon: "🏛️"
+    icon: "🏛️",
+    lat: 25.0560,
+    lng: 121.5100
   },
   {
     id: "spot_tpe_2",
@@ -23,7 +25,9 @@ export const DEFAULT_SPOTS: Spot[] = [
     location: "台北市士林區",
     region: "北部",
     county: "台北市",
-    icon: "🏺"
+    icon: "🏺",
+    lat: 25.1023,
+    lng: 121.5485
   },
   {
     id: "spot_tpe_3",
@@ -32,7 +36,9 @@ export const DEFAULT_SPOTS: Spot[] = [
     location: "台北市信義區",
     region: "北部",
     county: "台北市",
-    icon: "🏙️"
+    icon: "🏙️",
+    lat: 25.0339,
+    lng: 121.5644
   },
   {
     id: "spot_ntpc_1",
@@ -41,7 +47,9 @@ export const DEFAULT_SPOTS: Spot[] = [
     location: "新北市瑞芳區",
     region: "北部",
     county: "新北市",
-    icon: "🏮"
+    icon: "🏮",
+    lat: 25.1099,
+    lng: 121.8452
   },
   {
     id: "spot_ntpc_2",
@@ -50,7 +58,9 @@ export const DEFAULT_SPOTS: Spot[] = [
     location: "新北市淡水區",
     region: "北部",
     county: "新北市",
-    icon: "⛵"
+    icon: "⛵",
+    lat: 25.1754,
+    lng: 121.4329
   },
   {
     id: "spot_ila_1",
@@ -59,7 +69,9 @@ export const DEFAULT_SPOTS: Spot[] = [
     location: "宜蘭縣羅東鎮",
     region: "北部",
     county: "宜蘭縣",
-    icon: "🌲"
+    icon: "🌲",
+    lat: 24.6865,
+    lng: 121.7709
   },
   {
     id: "spot_ila_2",
@@ -68,7 +80,9 @@ export const DEFAULT_SPOTS: Spot[] = [
     location: "宜蘭縣冬山鄉",
     region: "北部",
     county: "宜蘭縣",
-    icon: "⛵"
+    icon: "⛵",
+    lat: 24.6346,
+    lng: 121.7915
   },
   {
     id: "spot_ila_3",
@@ -77,7 +91,9 @@ export const DEFAULT_SPOTS: Spot[] = [
     location: "宜蘭縣蘇澳鎮",
     region: "北部",
     county: "宜蘭縣",
-    icon: "🫧"
+    icon: "🫧",
+    lat: 24.5953,
+    lng: 121.8504
   },
   {
     id: "spot_ila_4",
@@ -86,7 +102,9 @@ export const DEFAULT_SPOTS: Spot[] = [
     location: "宜蘭縣蘇澳鎮",
     region: "北部",
     county: "宜蘭縣",
-    icon: "🐟"
+    icon: "🐟",
+    lat: 24.5828,
+    lng: 121.8687
   },
   // 中部
   {
@@ -96,7 +114,9 @@ export const DEFAULT_SPOTS: Spot[] = [
     location: "台中市清水區",
     region: "中部",
     county: "台中市",
-    icon: "🌅"
+    icon: "🌅",
+    lat: 24.3120,
+    lng: 120.5501
   },
   {
     id: "spot_txg_2",
@@ -105,7 +125,9 @@ export const DEFAULT_SPOTS: Spot[] = [
     location: "台中市西區",
     region: "中部",
     county: "台中市",
-    icon: "☕"
+    icon: "☕",
+    lat: 24.1456,
+    lng: 120.6629
   },
   {
     id: "spot_nan_1",
@@ -114,7 +136,9 @@ export const DEFAULT_SPOTS: Spot[] = [
     location: "南投縣魚池鄉",
     region: "中部",
     county: "南投縣",
-    icon: "🛶"
+    icon: "🛶",
+    lat: 23.8517,
+    lng: 120.9167
   },
   {
     id: "spot_nan_2",
@@ -123,7 +147,9 @@ export const DEFAULT_SPOTS: Spot[] = [
     location: "南投縣仁愛鄉",
     region: "中部",
     county: "南投縣",
-    icon: "🐑"
+    icon: "🐑",
+    lat: 24.0583,
+    lng: 121.1627
   },
   {
     id: "spot_chw_1",
@@ -132,7 +158,9 @@ export const DEFAULT_SPOTS: Spot[] = [
     location: "彰化縣鹿港鎮",
     region: "中部",
     county: "彰化縣",
-    icon: "🏮"
+    icon: "🏮",
+    lat: 24.0567,
+    lng: 120.4326
   },
   // 南部
   {
@@ -142,7 +170,9 @@ export const DEFAULT_SPOTS: Spot[] = [
     location: "台南市安平區",
     region: "南部",
     county: "台南市",
-    icon: "🏰"
+    icon: "🏰",
+    lat: 23.0016,
+    lng: 120.1606
   },
   {
     id: "spot_tnn_2",
@@ -151,7 +181,9 @@ export const DEFAULT_SPOTS: Spot[] = [
     location: "台南市中西區",
     region: "南部",
     county: "台南市",
-    icon: "🏯"
+    icon: "🏯",
+    lat: 22.9976,
+    lng: 120.2026
   },
   {
     id: "spot_khh_1",
@@ -160,7 +192,9 @@ export const DEFAULT_SPOTS: Spot[] = [
     location: "高雄市鹽埕區",
     region: "南部",
     county: "高雄市",
-    icon: "🎨"
+    icon: "🎨",
+    lat: 22.6202,
+    lng: 120.2818
   },
   {
     id: "spot_khh_2",
@@ -169,7 +203,9 @@ export const DEFAULT_SPOTS: Spot[] = [
     location: "高雄市旗津區",
     region: "南部",
     county: "高雄市",
-    icon: "🚢"
+    icon: "🚢",
+    lat: 22.6146,
+    lng: 120.2678
   },
   {
     id: "spot_chi_1",
@@ -178,7 +214,9 @@ export const DEFAULT_SPOTS: Spot[] = [
     location: "嘉義縣阿里山鄉",
     region: "南部",
     county: "嘉義縣",
-    icon: "🚂"
+    icon: "🚂",
+    lat: 23.5106,
+    lng: 120.8037
   },
   {
     id: "spot_pif_1",
@@ -187,7 +225,9 @@ export const DEFAULT_SPOTS: Spot[] = [
     location: "屏東縣恆春鎮",
     region: "南部",
     county: "屏東縣",
-    icon: "🗼"
+    icon: "🗼",
+    lat: 21.9022,
+    lng: 120.8524
   },
   // 東部
   {
@@ -197,7 +237,9 @@ export const DEFAULT_SPOTS: Spot[] = [
     location: "花蓮縣秀林鄉",
     region: "東部",
     county: "花蓮縣",
-    icon: "⛰️"
+    icon: "⛰️",
+    lat: 24.1590,
+    lng: 121.6219
   },
   {
     id: "spot_hua_2",
@@ -206,7 +248,9 @@ export const DEFAULT_SPOTS: Spot[] = [
     location: "花蓮縣新城鄉",
     region: "東部",
     county: "花蓮縣",
-    icon: "🌊"
+    icon: "🌊",
+    lat: 24.0305,
+    lng: 121.6293
   },
   {
     id: "spot_ttt_1",
@@ -215,7 +259,9 @@ export const DEFAULT_SPOTS: Spot[] = [
     location: "台東縣池上鄉",
     region: "東部",
     county: "台東縣",
-    icon: "🌾"
+    icon: "🌾",
+    lat: 23.1189,
+    lng: 121.2215
   },
   {
     id: "spot_ttt_2",
@@ -224,7 +270,9 @@ export const DEFAULT_SPOTS: Spot[] = [
     location: "台東縣成功鎮",
     region: "東部",
     county: "台東縣",
-    icon: "🌉"
+    icon: "🌉",
+    lat: 23.1235,
+    lng: 121.4184
   },
   // 離島
   {
@@ -234,7 +282,9 @@ export const DEFAULT_SPOTS: Spot[] = [
     location: "澎湖縣白沙鄉",
     region: "離島",
     county: "澎湖縣",
-    icon: "🌉"
+    icon: "🌉",
+    lat: 23.6521,
+    lng: 119.5323
   },
   {
     id: "spot_kin_1",
@@ -243,7 +293,9 @@ export const DEFAULT_SPOTS: Spot[] = [
     location: "金門縣金城鎮",
     region: "離島",
     county: "金門縣",
-    icon: "🏯"
+    icon: "🏯",
+    lat: 24.4253,
+    lng: 118.3149
   },
   {
     id: "spot_mzu_1",
@@ -252,11 +304,39 @@ export const DEFAULT_SPOTS: Spot[] = [
     location: "連江縣北竿鄉",
     region: "離島",
     county: "連江縣",
-    icon: "🏘️"
+    icon: "🏘️",
+    lat: 26.2238,
+    lng: 119.9832
   }
 ];
 
-const REGIONS_LIST = ["全部全台", "北部", "中部", "南部", "東部", "離島"];
+// Haversine distance calculator in kilometers
+export function calculateDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371; // Earth radius in km
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = 
+    Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+    Math.sin(dLon/2) * Math.sin(dLon/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return Math.round((R * c) * 10) / 10;
+}
+
+export const PRESET_LOCATIONS = [
+  { name: "宜蘭（羅東/冬山/蘇澳）", lat: 24.6865, lng: 121.7709 },
+  { name: "台北（大稻埕/故宮/101）", lat: 25.0450, lng: 121.5300 },
+  { name: "新北（九份/淡水）", lat: 25.1300, lng: 121.6500 },
+  { name: "台中（高美濕地/審計新村）", lat: 24.1500, lng: 120.6700 },
+  { name: "南投（日月潭/清境農場）", lat: 23.9500, lng: 120.9500 },
+  { name: "彰化（鹿港老街）", lat: 24.0567, lng: 120.4326 },
+  { name: "台南（安平古堡/赤崁樓）", lat: 23.0000, lng: 120.2000 },
+  { name: "高雄（駁二/旗津）", lat: 22.6200, lng: 120.3000 },
+  { name: "花蓮（太魯閣/七星潭）", lat: 24.0000, lng: 121.6000 },
+  { name: "台東（池上/三仙台）", lat: 23.1000, lng: 121.3000 }
+];
+
+export const REGIONS_LIST = ["📍 附近景點", "全部全台", "北部", "中部", "南部", "東部", "離島"];
 
 interface ExploreTabProps {
   onUnlockStory: (spotName: string, theme: string, tag: string) => void;
@@ -278,11 +358,48 @@ export default function ExploreTab({
   onClearInitialSpot
 }: ExploreTabProps) {
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedRegion, setSelectedRegion] = useState("全部全台");
+  const [selectedRegion, setSelectedRegion] = useState("📍 附近景點");
   const [selectedTheme, setSelectedTheme] = useState<"歷史背景" | "建築特色" | "在地飲食">("歷史背景");
   const [activeSpot, setActiveSpot] = useState<Spot | null>(null);
   const [currentArticle, setCurrentArticle] = useState<FeaturedStoryArticle | null>(null);
   const [activeTabMode, setActiveTabMode] = useState<"article" | "audio" | "tips">("article");
+
+  // User location for Nearby Spots
+  const [userCoords, setUserCoords] = useState<{ lat: number; lng: number; name: string }>({
+    lat: 24.6865,
+    lng: 121.7709,
+    name: "宜蘭（預設推薦附近）"
+  });
+  const [isLocating, setIsLocating] = useState(false);
+  const [isGpsActive, setIsGpsActive] = useState(false);
+  const [showLocationPicker, setShowLocationPicker] = useState(false);
+
+  // Auto detect GPS on launch
+  const handleRequestGpsLocation = () => {
+    if (typeof window !== "undefined" && navigator.geolocation) {
+      setIsLocating(true);
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          setUserCoords({
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+            name: "GPS 實體位置"
+          });
+          setIsLocating(false);
+          setIsGpsActive(true);
+        },
+        (err) => {
+          console.log("GPS locate failed/permission denied, staying on default nearby location:", err);
+          setIsLocating(false);
+        },
+        { enableHighAccuracy: true, timeout: 5000, maximumAge: 300000 }
+      );
+    }
+  };
+
+  useEffect(() => {
+    handleRequestGpsLocation();
+  }, []);
 
   // Voice/audio custom controls
   const [guideText, setGuideText] = useState("");
@@ -336,7 +453,7 @@ export default function ExploreTab({
 
   // Handle open spot guide modal and load authentic featured article immediately
   const handleOpenGuide = (
-    spot: SpotItem,
+    spot: Spot,
     theme: "歷史背景" | "建築特色" | "在地飲食" = selectedTheme,
     openMode: "article" | "audio" = "article"
   ) => {
@@ -490,15 +607,39 @@ export default function ExploreTab({
     }
   };
 
-  // Filter spots by search & region
-  const filteredSpots = DEFAULT_SPOTS.filter((spot) => {
-    const matchesSearch =
-      spot.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      spot.location.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      spot.intro.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesRegion = selectedRegion === "全部全台" || spot.region === selectedRegion;
-    return matchesSearch && matchesRegion;
+  // Calculate distance for all spots
+  const spotsWithDistance: Spot[] = DEFAULT_SPOTS.map((spot) => {
+    if (spot.lat && spot.lng) {
+      const dist = calculateDistanceKm(userCoords.lat, userCoords.lng, spot.lat, spot.lng);
+      return { ...spot, distanceKm: dist };
+    }
+    return spot;
   });
+
+  // Top nearby spots sorted by proximity for the quick guide picker
+  const nearbyRecommendedSpots = [...spotsWithDistance]
+    .sort((a, b) => (a.distanceKm ?? 9999) - (b.distanceKm ?? 9999))
+    .slice(0, 4);
+
+  // Filter spots by search & region
+  const filteredSpots = spotsWithDistance
+    .filter((spot) => {
+      const matchesSearch =
+        spot.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        spot.location.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        spot.intro.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesRegion =
+        selectedRegion === "全部全台" ||
+        selectedRegion === "📍 附近景點" ||
+        spot.region === selectedRegion;
+      return matchesSearch && matchesRegion;
+    })
+    .sort((a, b) => {
+      if (selectedRegion === "📍 附近景點") {
+        return (a.distanceKm ?? 9999) - (b.distanceKm ?? 9999);
+      }
+      return 0;
+    });
 
   const themesList: Array<{ name: "歷史背景" | "建築特色" | "在地飲食"; icon: string }> = [
     { name: "歷史背景", icon: "🏛️" },
@@ -507,7 +648,7 @@ export default function ExploreTab({
   ];
 
   return (
-    <div className="space-y-6 fade-in p-1">
+    <div className="space-y-5 fade-in p-1">
       {/* Hero Header */}
       <div className="bg-[#13294B] text-white p-5 rounded-2xl shadow-md relative overflow-hidden">
         <div className="absolute top-0 right-0 p-8 opacity-10 font-[serif] text-8xl">台</div>
@@ -519,6 +660,157 @@ export default function ExploreTab({
           <p className="text-gray-200 text-xs sm:text-sm max-w-lg leading-relaxed">
             告別走馬看花！收錄全台22縣市精選文史身世、建築空間構造密碼、常民舌尖尋味與行家現場走讀密技。
           </p>
+        </div>
+      </div>
+
+      {/* 📍 Nearby Spots Guide Picker Section (預設開啟附近的景點可以挑選導覽) */}
+      <div className="bg-gradient-to-br from-[#13294B] via-[#1B3B60] to-[#13294B] text-white p-4.5 rounded-2xl shadow-md space-y-3.5 border border-[#E8A02C]/25 relative">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2.5">
+            <span className="p-2 bg-[#E8A02C]/20 text-[#E8A02C] rounded-xl text-xl">📍</span>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-extrabold text-sm sm:text-base font-display">
+                  附近熱門景點導覽推薦
+                </h3>
+                <span className="bg-[#E8A02C] text-[#13294B] text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider">
+                  預設推薦
+                </span>
+              </div>
+              <p className="text-[11px] text-gray-300 mt-0.5 flex items-center gap-1.5 flex-wrap">
+                <span>目前所在地：</span>
+                <span className="font-bold text-amber-300 underline decoration-amber-400/50 underline-offset-2">
+                  {userCoords.name}
+                </span>
+                {isGpsActive && (
+                  <span className="text-[9px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.2 rounded font-mono">
+                    🛰️ GPS 精準
+                  </span>
+                )}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={handleRequestGpsLocation}
+              disabled={isLocating}
+              className="text-[10px] bg-white/10 hover:bg-white/20 active:scale-95 text-white px-2.5 py-1.5 rounded-xl font-bold flex items-center gap-1 transition-all border border-white/15 cursor-pointer disabled:opacity-50"
+              title="使用 GPS 自動重新偵測所在地"
+            >
+              <Compass className={`w-3.5 h-3.5 text-[#E8A02C] ${isLocating ? "animate-spin" : ""}`} />
+              <span>{isLocating ? "定位中..." : "重新定位"}</span>
+            </button>
+            <button
+              onClick={() => setShowLocationPicker(!showLocationPicker)}
+              className="text-[10px] bg-white/10 hover:bg-white/20 active:scale-95 text-white px-2.5 py-1.5 rounded-xl font-bold flex items-center gap-1 transition-all border border-white/15 cursor-pointer"
+              title="點擊手動更換所在城市"
+            >
+              <MapPin className="w-3.5 h-3.5 text-amber-300" />
+              <span>切換地點</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Location Picker Popover Drawer */}
+        {showLocationPicker && (
+          <div className="p-3 bg-black/30 backdrop-blur-md rounded-xl border border-white/15 space-y-2 animate-fadeIn text-xs">
+            <div className="flex justify-between items-center text-gray-300 text-[10px] font-bold">
+              <span>選擇您所在的台灣城市以計算周邊景點：</span>
+              <button
+                onClick={() => setShowLocationPicker(false)}
+                className="text-gray-400 hover:text-white px-1.5 py-0.5 rounded cursor-pointer"
+              >
+                ✕ 關閉
+              </button>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+              {PRESET_LOCATIONS.map((loc) => {
+                const isCur = userCoords.name === loc.name;
+                return (
+                  <button
+                    key={loc.name}
+                    onClick={() => {
+                      setUserCoords(loc);
+                      setIsGpsActive(false);
+                      setShowLocationPicker(false);
+                    }}
+                    className={`p-2 rounded-lg text-left text-[11px] transition-all cursor-pointer border ${
+                      isCur
+                        ? "bg-[#E8A02C] text-[#13294B] border-[#E8A02C] font-bold shadow-xs"
+                        : "bg-white/5 hover:bg-white/15 text-gray-200 border-white/10"
+                    }`}
+                  >
+                    📍 {loc.name}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* 4 Quick Pick Nearby Spot Cards */}
+        <div className="space-y-1.5 pt-1">
+          <div className="text-[11px] text-gray-300 flex items-center justify-between">
+            <span>✨ 距離您最近的景點（點擊直接收聽導覽或閱讀專文）：</span>
+            <span className="text-[10px] text-amber-300/90 font-mono">
+              主題：{selectedTheme}
+            </span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            {nearbyRecommendedSpots.map((spot) => {
+              const distLabel =
+                spot.distanceKm !== undefined
+                  ? spot.distanceKm < 1
+                    ? `距您約 ${Math.round(spot.distanceKm * 1000)} 公尺`
+                    : `距您約 ${spot.distanceKm} 公里`
+                  : "周邊熱門";
+
+              return (
+                <div
+                  key={spot.id}
+                  className="bg-white/10 hover:bg-white/15 border border-white/15 rounded-xl p-3 flex flex-col justify-between transition-all group shadow-xs"
+                >
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xl p-0.5 bg-white/10 rounded-lg">{spot.icon}</span>
+                        <h4 className="font-bold text-sm text-white group-hover:text-[#E8A02C] transition-colors">
+                          {spot.name}
+                        </h4>
+                      </div>
+                      <span className="bg-emerald-400/20 text-emerald-300 border border-emerald-400/30 text-[9px] font-mono font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                        📍 {distLabel}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-gray-300 line-clamp-1 pl-0.5">
+                      {spot.intro}
+                    </p>
+                  </div>
+
+                  {/* Quick Action buttons */}
+                  <div className="flex items-center gap-2 pt-2.5 mt-1.5 border-t border-white/10">
+                    <button
+                      onClick={() => handleOpenGuide(spot, selectedTheme, "audio")}
+                      className="flex-1 bg-[#E8A02C] hover:bg-[#d68f23] text-[#13294B] text-[11px] font-black py-1.5 px-2 rounded-lg flex items-center justify-center gap-1 transition-all shadow-xs cursor-pointer active:scale-95"
+                      title="直接播放景點語音解說"
+                    >
+                      <Headphones className="w-3.5 h-3.5 text-[#13294B]" />
+                      <span>🎙️ 立即導覽</span>
+                    </button>
+                    <button
+                      onClick={() => handleOpenGuide(spot, selectedTheme, "article")}
+                      className="flex-1 bg-white/15 hover:bg-white/25 text-white text-[11px] font-bold py-1.5 px-2 rounded-lg flex items-center justify-center gap-1 transition-all border border-white/15 cursor-pointer active:scale-95"
+                      title="閱讀深度文史與空間解說"
+                    >
+                      <BookOpen className="w-3.5 h-3.5 text-amber-200" />
+                      <span>📖 深度故事</span>
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
 
@@ -625,11 +917,16 @@ export default function ExploreTab({
                               </span>
                             )}
                           </div>
-                          <span className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
+                          <span className="text-xs text-gray-500 flex items-center flex-wrap gap-1 mt-0.5">
                             📍 {spot.location}
                             {spot.region && (
-                              <span className="ml-1 bg-gray-100 text-gray-600 text-[10px] px-1.5 py-0.2 rounded font-medium">
+                              <span className="ml-0.5 bg-gray-100 text-gray-600 text-[10px] px-1.5 py-0.2 rounded font-medium">
                                 {spot.region}
+                              </span>
+                            )}
+                            {spot.distanceKm !== undefined && (
+                              <span className="ml-1 bg-emerald-50 text-emerald-700 text-[10px] font-bold px-2 py-0.2 rounded-full border border-emerald-200/80 font-mono">
+                                📍 距您 {spot.distanceKm < 1 ? `${Math.round(spot.distanceKm * 1000)} 公尺` : `${spot.distanceKm} 公里`}
                               </span>
                             )}
                           </span>
