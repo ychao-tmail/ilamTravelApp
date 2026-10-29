@@ -5,6 +5,9 @@ on:
     branches: [ main, master ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -53,3 +56,16 @@ jobs:
       with:
         name: deepgo-taiwan-v${{ env.APP_VERSION }}-apk
         path: android/app/build/outputs/apk/debug/deepgo-taiwan-v${{ env.APP_VERSION }}-debug.apk
+
+    - name: Publish GitHub Release (Direct APK Download)
+      uses: softprops/action-gh-release@v2
+      if: github.ref == 'refs/heads/main'
+      with:
+        tag_name: v${{ env.APP_VERSION }}
+        name: AI深旅 DeepGo v${{ env.APP_VERSION }}
+        draft: false
+        prerelease: false
+        generate_release_notes: true
+        files: android/app/build/outputs/apk/debug/deepgo-taiwan-v${{ env.APP_VERSION }}-debug.apk
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
