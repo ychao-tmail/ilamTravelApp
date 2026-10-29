@@ -1,0 +1,59 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", system-ui, sans-serif;
+  --font-display: "Outfit", sans-serif;
+  --font-serif: "Playfair Display", Georgia, serif;
+  --font-mono: "JetBrains Mono", monospace;
+  
+  --color-sea-blue: #13294B;
+  --color-amber-gold: #E8A02C;
+  --color-terra-orange: #D2691E;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: #FAF8F5; /* Warm white background */
+  color: #1A1A1A;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+}
+
+/* Custom fade transitions */
+.fade-in {
+  animation: fadeIn 0.35s ease-out forwards;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Simulated Audio Wave Animation */
+.bar {
+  display: inline-block;
+  width: 3px;
+  height: 2px;
+  background-color: var(--color-amber-gold);
+  border-radius: 2px;
+  margin: 0 1px;
+}
+
+.playing .bar:nth-child(1) { animation: bounce 0.8s ease-in-out infinite alternate; }
+.playing .bar:nth-child(2) { animation: bounce 0.5s ease-in-out infinite alternate 0.15s; }
+.playing .bar:nth-child(3) { animation: bounce 0.9s ease-in-out infinite alternate 0.05s; }
+.playing .bar:nth-child(4) { animation: bounce 0.6s ease-in-out infinite alternate 0.2s; }
+.playing .bar:nth-child(5) { animation: bounce 0.7s ease-in-out infinite alternate 0.1s; }
+
+@keyframes bounce {
+  from { height: 2px; }
+  to { height: 18px; }
+}

@@ -1,0 +1,6 @@
+{
+  "summary":  "Capacitor Android APK 打包與雲端後端連網部署架構規劃書：定義 Capacitor 容器配置、VITE_API_BASE_URL 動態 API Client、連線狀態與容錯處理機制，以及從網頁打包為原生 APK 的端到端建置流程。",
+  "updatedAt":  "2026-10-29T00:21:13.271771041Z",
+  "requestFeedback":  true,
+  "userFacing":  true
+}

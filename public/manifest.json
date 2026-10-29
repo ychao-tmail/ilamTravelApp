@@ -1,0 +1,17 @@
+{
+  "short_name": "DeepGo",
+  "name": "全台 AI 深度旅遊導覽平台",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "type": "image/svg+xml",
+      "sizes": "512x512 192x192 any",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#064e3b",
+  "theme_color": "#059669",
+  "display": "standalone",
+  "orientation": "portrait"
+}

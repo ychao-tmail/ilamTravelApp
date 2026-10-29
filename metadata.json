@@ -1,0 +1,8 @@
+{
+  "name": "全台 AI 深度旅遊導覽平台",
+  "description": "結合 AI 故事化導覽與行前智慧行程規劃的全台灣深度旅遊平台原型。",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

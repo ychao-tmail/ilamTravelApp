@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">AI深旅 DeepGo</string>
+    <string name="title_activity_main">AI深旅 DeepGo</string>
+    <string name="package_name">com.deepgo.taiwan</string>
+    <string name="custom_url_scheme">com.deepgo.taiwan</string>
+</resources>
