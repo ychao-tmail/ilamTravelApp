@@ -10,7 +10,7 @@
     "cap:sync": "vite build && cap sync android",
     "cap:copy": "vite build && cap copy android",
     "cap:open": "cap open android",
-    "start": "node dist/server.cjs",
+    "start": "node server.ts",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit"

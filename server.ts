@@ -3,12 +3,12 @@ import path from "path";
 import dotenv from "dotenv";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
-import { resolveSpotStory } from "./src/data/taiwanStories";
+import { resolveSpotStory } from "./src/data/taiwanStories.ts";
 
 dotenv.config();
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
 // Enable CORS for Capacitor Native App (capacitor://localhost, http://localhost) & Web Clients
 app.use((req, res, next) => {
