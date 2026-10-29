@@ -67,6 +67,7 @@ interface AiPlannerTabProps {
   presetDays?: number;
   presetDistricts?: string[];
   clearPresets?: () => void;
+  detectedCounty?: string;
 }
 
 export default function AiPlannerTab({ 
@@ -74,7 +75,8 @@ export default function AiPlannerTab({
   onNavigateToItinerary,
   presetDays,
   presetDistricts,
-  clearPresets
+  clearPresets,
+  detectedCounty
 }: AiPlannerTabProps) {
   // Mode: 'input' or 'result'
   const [step, setStep] = useState<"input" | "result">("input");
@@ -84,7 +86,9 @@ export default function AiPlannerTab({
   const [showGeoModal, setShowGeoModal] = useState<boolean>(false);
 
   // Preference States
-  const [selectedCounty, setSelectedCounty] = useState<string>("台灣 - 台北市");
+  const [selectedCounty, setSelectedCounty] = useState<string>(() => {
+    return detectedCounty || "台灣 - 台北市";
+  });
   const [customCountyInput, setCustomCountyInput] = useState<string>("");
   const [selectedDistricts, setSelectedDistricts] = useState<string[]>(["台北101", "故宮博物院"]);
   const [customDistrictInput, setCustomDistrictInput] = useState<string>("");
@@ -173,6 +177,16 @@ export default function AiPlannerTab({
       }
     }
   }, [presetDays, presetDistricts]);
+
+  useEffect(() => {
+    if (detectedCounty && (!presetDistricts || presetDistricts.length === 0)) {
+      setSelectedCounty(detectedCounty);
+      const spots = DESTINATION_SPOTS_MAP[detectedCounty];
+      if (spots && spots.length > 0) {
+        setSelectedDistricts(spots.slice(0, 2));
+      }
+    }
+  }, [detectedCounty]);
 
   const [isLoading, setIsLoading] = useState(false);
   const [itineraryResult, setItineraryResult] = useState<DayItinerary[]>([]);

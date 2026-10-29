@@ -1,8 +1,18 @@
 import { useState, useEffect } from "react";
-import { Search, Sparkles, Volume2, BookOpen, Compass, CornerDownRight, Play, Pause, Check, MapPin, Share2, Layers, Headphones, FileText, CheckCircle2, ChevronRight, X } from "lucide-react";
+import { Search, Sparkles, Volume2, BookOpen, Compass, CornerDownRight, Play, Pause, Check, MapPin, Share2, Layers, Headphones, FileText, CheckCircle2, ChevronRight, X, Wifi, Radio, Navigation } from "lucide-react";
 import { Spot } from "../types";
 import { resolveSpotStory, FeaturedStoryArticle } from "../data/taiwanStories";
 import { apiClient } from "../api/client";
+import { 
+  fetchMobileNetworkLocation, 
+  fetchDeviceGeolocation, 
+  getCachedLocation, 
+  saveCachedLocation, 
+  calcDistanceKm, 
+  findClosestTaiwanCounty, 
+  TAIWAN_COUNTIES, 
+  DetectedLocation 
+} from "../services/locationService";
 
 // Flagship spots across Taiwan (North, Central, South, East, Offshore)
 export const DEFAULT_SPOTS: Spot[] = [
@@ -312,28 +322,20 @@ export const DEFAULT_SPOTS: Spot[] = [
 
 // Haversine distance calculator in kilometers
 export function calculateDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371; // Earth radius in km
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a = 
-    Math.sin(dLat/2) * Math.sin(dLat/2) +
-    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
-    Math.sin(dLon/2) * Math.sin(dLon/2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-  return Math.round((R * c) * 10) / 10;
+  return calcDistanceKm(lat1, lon1, lat2, lon2);
 }
 
 export const PRESET_LOCATIONS = [
-  { name: "宜蘭（羅東/冬山/蘇澳）", lat: 24.6865, lng: 121.7709 },
-  { name: "台北（大稻埕/故宮/101）", lat: 25.0450, lng: 121.5300 },
-  { name: "新北（九份/淡水）", lat: 25.1300, lng: 121.6500 },
-  { name: "台中（高美濕地/審計新村）", lat: 24.1500, lng: 120.6700 },
-  { name: "南投（日月潭/清境農場）", lat: 23.9500, lng: 120.9500 },
-  { name: "彰化（鹿港老街）", lat: 24.0567, lng: 120.4326 },
-  { name: "台南（安平古堡/赤崁樓）", lat: 23.0000, lng: 120.2000 },
-  { name: "高雄（駁二/旗津）", lat: 22.6200, lng: 120.3000 },
-  { name: "花蓮（太魯閣/七星潭）", lat: 24.0000, lng: 121.6000 },
-  { name: "台東（池上/三仙台）", lat: 23.1000, lng: 121.3000 }
+  { name: "宜蘭（羅東/冬山/蘇澳）", lat: 24.6865, lng: 121.7709, countyKey: "台灣 - 宜蘭縣" },
+  { name: "台北（大稻埕/故宮/101）", lat: 25.0450, lng: 121.5300, countyKey: "台灣 - 台北市" },
+  { name: "新北（九份/淡水）", lat: 25.1300, lng: 121.6500, countyKey: "台灣 - 新北市" },
+  { name: "台中（高美濕地/審計新村）", lat: 24.1500, lng: 120.6700, countyKey: "台灣 - 台中市" },
+  { name: "南投（日月潭/清境農場）", lat: 23.9500, lng: 120.9500, countyKey: "台灣 - 南投縣" },
+  { name: "彰化（鹿港老街）", lat: 24.0567, lng: 120.4326, countyKey: "台灣 - 彰化縣" },
+  { name: "台南（安平古堡/赤崁樓）", lat: 23.0000, lng: 120.2000, countyKey: "台灣 - 台南市" },
+  { name: "高雄（駁二/旗津）", lat: 22.6200, lng: 120.3000, countyKey: "台灣 - 高雄市" },
+  { name: "花蓮（太魯閣/七星潭）", lat: 24.0000, lng: 121.6000, countyKey: "台灣 - 花蓮縣" },
+  { name: "台東（池上/三仙台）", lat: 23.1000, lng: 121.3000, countyKey: "台灣 - 台東縣" }
 ];
 
 export const REGIONS_LIST = ["📍 附近景點", "全部全台", "北部", "中部", "南部", "東部", "離島"];
@@ -346,6 +348,7 @@ interface ExploreTabProps {
   visitedSpots?: string[];
   initialSpotName?: string | null;
   onClearInitialSpot?: () => void;
+  onUserCountyDetected?: (countyKey: string) => void;
 }
 
 export default function ExploreTab({ 
@@ -355,7 +358,8 @@ export default function ExploreTab({
   onToggleVisitedSpot,
   visitedSpots = [],
   initialSpotName,
-  onClearInitialSpot
+  onClearInitialSpot,
+  onUserCountyDetected
 }: ExploreTabProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedRegion, setSelectedRegion] = useState("📍 附近景點");
@@ -364,41 +368,111 @@ export default function ExploreTab({
   const [currentArticle, setCurrentArticle] = useState<FeaturedStoryArticle | null>(null);
   const [activeTabMode, setActiveTabMode] = useState<"article" | "audio" | "tips">("article");
 
-  // User location for Nearby Spots
-  const [userCoords, setUserCoords] = useState<{ lat: number; lng: number; name: string }>({
-    lat: 24.6865,
-    lng: 121.7709,
-    name: "宜蘭（預設推薦附近）"
+  // User location for Nearby Spots (with local cache support)
+  const [userCoords, setUserCoords] = useState<DetectedLocation>(() => {
+    const cached = getCachedLocation();
+    if (cached) return cached;
+    return {
+      lat: 25.0450,
+      lng: 121.5300,
+      name: "台北市（預設中心）",
+      countyName: "台北市",
+      source: "cache",
+      accuracyDesc: "預設位置"
+    };
   });
+
   const [isLocating, setIsLocating] = useState(false);
-  const [isGpsActive, setIsGpsActive] = useState(false);
+  const [locatingMethod, setLocatingMethod] = useState<"network" | "gps" | null>(null);
+  const [locationStatusNotice, setLocationStatusNotice] = useState<string | null>(null);
   const [showLocationPicker, setShowLocationPicker] = useState(false);
 
-  // Auto detect GPS on launch
-  const handleRequestGpsLocation = () => {
-    if (typeof window !== "undefined" && navigator.geolocation) {
-      setIsLocating(true);
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          setUserCoords({
-            lat: pos.coords.latitude,
-            lng: pos.coords.longitude,
-            name: "GPS 實體位置"
-          });
-          setIsLocating(false);
-          setIsGpsActive(true);
-        },
-        (err) => {
-          console.log("GPS locate failed/permission denied, staying on default nearby location:", err);
-          setIsLocating(false);
-        },
-        { enableHighAccuracy: true, timeout: 5000, maximumAge: 300000 }
-      );
+  // 1. Mobile Network Location (4G/5G 行動網路基地台定位 - 室內外皆可秒速定位，不需等待 GPS 衛星)
+  const handleLocateViaMobileNetwork = async () => {
+    setIsLocating(true);
+    setLocatingMethod("network");
+    setLocationStatusNotice("📶 正在以行動網路基地台定位所在地...");
+
+    try {
+      const netLoc = await fetchMobileNetworkLocation();
+      if (netLoc) {
+        setUserCoords(netLoc);
+        setLocationStatusNotice(`✅ 已由行動網路定位：${netLoc.countyName}`);
+        if (onUserCountyDetected) {
+          const { county } = findClosestTaiwanCounty(netLoc.lat, netLoc.lng);
+          onUserCountyDetected(county.countyKey);
+        }
+      } else {
+        setLocationStatusNotice("行動網路定位查詢逾時，維持目前所在地");
+      }
+    } catch (e) {
+      console.warn("Mobile network locate error:", e);
+      setLocationStatusNotice("行動網路訊號不穩，請稍候再試");
+    } finally {
+      setIsLocating(false);
+      setLocatingMethod(null);
+      setTimeout(() => setLocationStatusNotice(null), 4000);
     }
   };
 
+  // 2. GPS Satellite / Device Hardware Location
+  const handleLocateViaGps = async () => {
+    setIsLocating(true);
+    setLocatingMethod("gps");
+    setLocationStatusNotice("🛰️ 正在連線 GPS 衛星偵測精準位置...");
+
+    try {
+      const gpsLoc = await fetchDeviceGeolocation(true);
+      setUserCoords(gpsLoc);
+      setLocationStatusNotice(`✅ GPS 衛星精準定位成功：${gpsLoc.countyName}`);
+      if (onUserCountyDetected) {
+        const { county } = findClosestTaiwanCounty(gpsLoc.lat, gpsLoc.lng);
+        onUserCountyDetected(county.countyKey);
+      }
+    } catch (err: any) {
+      console.log("GPS locate unavailable or denied, falling back to mobile network:", err);
+      setLocationStatusNotice("GPS 訊號弱，自動切換為行動網路基地台定位...");
+      // Auto fallback to cellular network
+      const netLoc = await fetchMobileNetworkLocation();
+      if (netLoc) {
+        setUserCoords(netLoc);
+        setLocationStatusNotice(`✅ 已自動切換為行動網路定位：${netLoc.countyName}`);
+        if (onUserCountyDetected) {
+          const { county } = findClosestTaiwanCounty(netLoc.lat, netLoc.lng);
+          onUserCountyDetected(county.countyKey);
+        }
+      }
+    } finally {
+      setIsLocating(false);
+      setLocatingMethod(null);
+      setTimeout(() => setLocationStatusNotice(null), 4000);
+    }
+  };
+
+  // Auto detect location on initial app launch:
+  // Immediately attempts Mobile Network (instant) + attempts coarse device geolocation
   useEffect(() => {
-    handleRequestGpsLocation();
+    // Immediate non-blocking mobile network location fetch
+    fetchMobileNetworkLocation().then((netLoc) => {
+      if (netLoc) {
+        setUserCoords(netLoc);
+        if (onUserCountyDetected) {
+          const { county } = findClosestTaiwanCounty(netLoc.lat, netLoc.lng);
+          onUserCountyDetected(county.countyKey);
+        }
+      }
+    }).catch(() => {});
+
+    // Also attempt coarse device geolocation if available
+    fetchDeviceGeolocation(false).then((geoLoc) => {
+      if (geoLoc) {
+        setUserCoords(geoLoc);
+        if (onUserCountyDetected) {
+          const { county } = findClosestTaiwanCounty(geoLoc.lat, geoLoc.lng);
+          onUserCountyDetected(county.countyKey);
+        }
+      }
+    }).catch(() => {});
   }, []);
 
   // Voice/audio custom controls
@@ -682,66 +756,120 @@ export default function ExploreTab({
                 <span className="font-bold text-amber-300 underline decoration-amber-400/50 underline-offset-2">
                   {userCoords.name}
                 </span>
-                {isGpsActive && (
-                  <span className="text-[9px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.2 rounded font-mono">
+                {userCoords.source === "network" && (
+                  <span className="text-[9px] bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 px-1.5 py-0.2 rounded font-mono flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                    📶 行動網路定位
+                  </span>
+                )}
+                {userCoords.source === "gps" && (
+                  <span className="text-[9px] bg-sky-500/20 text-sky-300 border border-sky-400/30 px-1.5 py-0.2 rounded font-mono flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-sky-400"></span>
                     🛰️ GPS 精準
+                  </span>
+                )}
+                {userCoords.source === "cache" && (
+                  <span className="text-[9px] bg-amber-500/20 text-amber-300 border border-amber-400/30 px-1.5 py-0.2 rounded font-mono">
+                    ⚡ 自動記憶位置
                   </span>
                 )}
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5">
+          {/* Action buttons: Mobile Network, GPS, Manual Location Picker */}
+          <div className="flex items-center gap-1.5 flex-wrap">
             <button
-              onClick={handleRequestGpsLocation}
+              onClick={handleLocateViaMobileNetwork}
               disabled={isLocating}
-              className="text-[10px] bg-white/10 hover:bg-white/20 active:scale-95 text-white px-2.5 py-1.5 rounded-xl font-bold flex items-center gap-1 transition-all border border-white/15 cursor-pointer disabled:opacity-50"
-              title="使用 GPS 自動重新偵測所在地"
+              className={`text-[10px] px-2.5 py-1.5 rounded-xl font-bold flex items-center gap-1 transition-all border cursor-pointer active:scale-95 ${
+                locatingMethod === "network"
+                  ? "bg-emerald-500 text-white border-emerald-400"
+                  : "bg-white/10 hover:bg-white/20 text-white border-white/15"
+              } disabled:opacity-50`}
+              title="使用 4G/5G 行動網路基地台快速定位（免等待衛星，室內外皆可）"
             >
-              <Compass className={`w-3.5 h-3.5 text-[#E8A02C] ${isLocating ? "animate-spin" : ""}`} />
-              <span>{isLocating ? "定位中..." : "重新定位"}</span>
+              <Wifi className={`w-3.5 h-3.5 text-emerald-300 ${locatingMethod === "network" ? "animate-spin" : ""}`} />
+              <span>{locatingMethod === "network" ? "網路定位中..." : "行動網路定位"}</span>
             </button>
+
+            <button
+              onClick={handleLocateViaGps}
+              disabled={isLocating}
+              className={`text-[10px] px-2.5 py-1.5 rounded-xl font-bold flex items-center gap-1 transition-all border cursor-pointer active:scale-95 ${
+                locatingMethod === "gps"
+                  ? "bg-amber-500 text-white border-amber-400"
+                  : "bg-white/10 hover:bg-white/20 text-white border-white/15"
+              } disabled:opacity-50`}
+              title="使用手機硬體 GPS 衛星精準定位"
+            >
+              <Navigation className={`w-3.5 h-3.5 text-[#E8A02C] ${locatingMethod === "gps" ? "animate-spin" : ""}`} />
+              <span>{locatingMethod === "gps" ? "GPS搜尋中..." : "GPS精準"}</span>
+            </button>
+
             <button
               onClick={() => setShowLocationPicker(!showLocationPicker)}
               className="text-[10px] bg-white/10 hover:bg-white/20 active:scale-95 text-white px-2.5 py-1.5 rounded-xl font-bold flex items-center gap-1 transition-all border border-white/15 cursor-pointer"
-              title="點擊手動更換所在城市"
+              title="手動挑選全台 22 縣市所在位置"
             >
               <MapPin className="w-3.5 h-3.5 text-amber-300" />
-              <span>切換地點</span>
+              <span>切換城市</span>
             </button>
           </div>
         </div>
 
+        {/* Temporary locating status notice message */}
+        {locationStatusNotice && (
+          <div className="px-3 py-1.5 bg-black/40 backdrop-blur-md rounded-xl border border-white/20 text-[11px] text-amber-200 flex items-center gap-1.5 animate-fadeIn">
+            <span>ℹ️</span>
+            <span>{locationStatusNotice}</span>
+          </div>
+        )}
+
         {/* Location Picker Popover Drawer */}
         {showLocationPicker && (
-          <div className="p-3 bg-black/30 backdrop-blur-md rounded-xl border border-white/15 space-y-2 animate-fadeIn text-xs">
-            <div className="flex justify-between items-center text-gray-300 text-[10px] font-bold">
-              <span>選擇您所在的台灣城市以計算周邊景點：</span>
+          <div className="p-3 bg-black/40 backdrop-blur-md rounded-xl border border-white/20 space-y-2.5 animate-fadeIn text-xs">
+            <div className="flex justify-between items-center text-gray-200 text-[11px] font-bold">
+              <span>📍 選擇您所在的台灣城市（即時計算全台景點距您里程）：</span>
               <button
                 onClick={() => setShowLocationPicker(false)}
-                className="text-gray-400 hover:text-white px-1.5 py-0.5 rounded cursor-pointer"
+                className="text-gray-300 hover:text-white px-2 py-0.5 rounded cursor-pointer bg-white/10"
               >
                 ✕ 關閉
               </button>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
-              {PRESET_LOCATIONS.map((loc) => {
-                const isCur = userCoords.name === loc.name;
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-48 overflow-y-auto pr-1">
+              {TAIWAN_COUNTIES.map((c) => {
+                const isCur = userCoords.countyName === c.name || userCoords.name.includes(c.name);
                 return (
                   <button
-                    key={loc.name}
+                    key={c.name}
                     onClick={() => {
-                      setUserCoords(loc);
-                      setIsGpsActive(false);
+                      const newLoc: DetectedLocation = {
+                        lat: c.lat,
+                        lng: c.lng,
+                        name: `${c.name}（📍 手動自選）`,
+                        countyName: c.name,
+                        source: "manual",
+                        accuracyDesc: "手動指定"
+                      };
+                      setUserCoords(newLoc);
+                      saveCachedLocation(newLoc);
+                      if (onUserCountyDetected) {
+                        onUserCountyDetected(c.countyKey);
+                      }
                       setShowLocationPicker(false);
+                      setLocationStatusNotice(`已手動切換至：${c.name}`);
+                      setTimeout(() => setLocationStatusNotice(null), 3000);
                     }}
-                    className={`p-2 rounded-lg text-left text-[11px] transition-all cursor-pointer border ${
+                    className={`p-2 rounded-lg text-left text-[11px] transition-all cursor-pointer border flex items-center justify-between ${
                       isCur
                         ? "bg-[#E8A02C] text-[#13294B] border-[#E8A02C] font-bold shadow-xs"
-                        : "bg-white/5 hover:bg-white/15 text-gray-200 border-white/10"
+                        : "bg-white/10 hover:bg-white/20 text-gray-200 border-white/10"
                     }`}
                   >
-                    📍 {loc.name}
+                    <span>📍 {c.name}</span>
+                    <span className="text-[9px] opacity-75">{c.region}</span>
                   </button>
                 );
               })}
