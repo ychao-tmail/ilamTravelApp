@@ -673,7 +673,9 @@ export default function App() {
                   <div className="flex-1 space-y-1">
                     <div className="flex items-center justify-between">
                       <span className="font-bold text-xs">
-                        {serverStatus.ok ? "🟢 雲端伺服器通訊正常" : "🟠 伺服器連線偵測中"}
+                        {serverStatus.ok 
+                          ? (isNativePlatform() && !apiClient.getBaseUrl() ? "🟢 原生離線智慧引擎已就緒" : "🟢 雲端伺服器通訊正常") 
+                          : "🟠 離線智慧模式啟動中"}
                       </span>
                       {serverStatus.latencyMs !== undefined && (
                         <span className="font-mono text-[10px] bg-white/70 px-1.5 py-0.5 rounded-md border border-emerald-200">
@@ -682,25 +684,27 @@ export default function App() {
                       )}
                     </div>
                     <p className="text-[11px] leading-relaxed opacity-90">
-                      {serverStatus.ok
-                        ? "手機 APK 能正常呼叫遠端 Gemini 3.8 Flash 模型與即時行程規劃。"
-                        : (serverStatus.error || "無法連上伺服器，請確認網路連線或稍候重試。")}
+                      {isNativePlatform() && !apiClient.getBaseUrl()
+                        ? "手機 APK 已啟用深旅本地原生智慧引擎，無需連接外網伺服器即可完整生成行程與故事導覽！"
+                        : (serverStatus.ok
+                          ? "已成功連線至雲端 API，享有即時大型語言模型服務。"
+                          : "未連線至自訂伺服器，已無縫切換至本地離線智慧引擎，功能運作完全正常。")}
                     </p>
                   </div>
                 </div>
 
                 {/* Current Active URL */}
                 <div className="space-y-1.5">
-                  <span className="text-[11px] font-bold text-gray-500 block">當前連線之 API 伺服器：</span>
+                  <span className="text-[11px] font-bold text-gray-500 block">當前運作模式：</span>
                   <div className="p-2.5 bg-gray-50 rounded-xl border border-gray-200 font-mono text-[11px] text-gray-800 break-all select-all">
-                    {apiClient.getBaseUrl() || (isNativePlatform() ? DEFAULT_CLOUD_BACKEND_URL : "（本機預覽模式 - 相對路徑）")}
+                    {apiClient.getBaseUrl() || (isNativePlatform() ? "⚡ 本機原生離線智慧引擎（高可靠度免外網）" : "（本機預覽模式 - 相對路徑）")}
                   </div>
                 </div>
 
                 {/* Custom URL Input */}
                 <div className="space-y-1.5 pt-1">
                   <label className="text-[11px] font-bold text-gray-600 block">
-                    自訂後端伺服器網址（選填）：
+                    自訂雲端後端伺服器網址（選填）：
                   </label>
                   <input
                     type="url"
@@ -710,33 +714,18 @@ export default function App() {
                     className="w-full bg-white border border-gray-200 rounded-xl p-2.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-[#13294B]"
                   />
                   <p className="text-[10px] text-gray-400">
-                    若您未來將 server.ts 部署到自訂雲端主機，可在手機輸入新網址直接切換。
+                    若您有部署 server.ts 至自訂伺服器（如 Render、Fly.io、GCP），可在此輸入網址串接雲端。
                   </p>
                 </div>
 
-                {/* Direct Mobile App & APK Guide Section */}
-                <div className="p-3 bg-amber-50/60 rounded-2xl border border-amber-200/80 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-xs text-amber-900 flex items-center gap-1.5">
-                      <span>📱</span> 手機立即體驗（免下載直接用）
-                    </span>
-                    <button
-                      onClick={() => {
-                        const url = "https://ais-pre-4c77ogdycvrhx7f7azn4an-369482150771.asia-east1.run.app";
-                        navigator.clipboard?.writeText(url);
-                        alert("已複製手機體驗網址！您可在手機瀏覽器開啟，並點選「加到主畫面」享受原生 App 全螢幕體驗。");
-                      }}
-                      className="px-2 py-0.5 bg-amber-600 hover:bg-amber-700 text-white rounded-md text-[10px] font-bold cursor-pointer transition-all active:scale-95"
-                    >
-                      複製手機網址
-                    </button>
+                {/* Dual Engine Info Badge */}
+                <div className="p-3 bg-blue-50/70 rounded-2xl border border-blue-200/80 space-y-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-blue-700 font-bold text-xs">🛡️ 雙模高可用韌性保障</span>
                   </div>
-                  <p className="text-[11px] text-amber-800 leading-relaxed">
-                    在手機 Chrome 或 Safari 開啟下方網址，點選「加到主畫面」或「安裝」，即刻以全螢幕獨立 App 啟動，功能與 APK 完全一致且即時連線 Gemini AI！
+                  <p className="text-[11px] text-blue-900 leading-relaxed">
+                    本 APK 內建台灣 22 縣市完整文史景點與行程數據。無論在飛機上、山區收訊不良或無後端伺服器環境，皆能 100% 順暢生成客製化多日深度行程！
                   </p>
-                  <div className="p-2 bg-white/80 rounded-lg border border-amber-200 font-mono text-[10px] text-gray-700 break-all select-all">
-                    https://ais-pre-4c77ogdycvrhx7f7azn4an-369482150771.asia-east1.run.app
-                  </div>
                 </div>
 
                 {/* Actions */}

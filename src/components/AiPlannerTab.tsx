@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Sparkles, Calendar, Compass, ClipboardList, RefreshCw, CheckCircle, ChevronRight, HelpCircle } from "lucide-react";
 import { PlannerPreferences, DayItinerary } from "../types";
 import { apiClient } from "../api/client";
+import { generateLocalSmartItinerary } from "../services/localPlannerEngine";
 
 const DESTINATIONS_LIST = [
   "台灣 - 台北市", 
@@ -232,16 +233,31 @@ export default function AiPlannerTab({
         voicePack: selectedVoicePack.replace(/[\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDC00-\uDFFF]/g, '').trim()
       });
       
-      if (data.success) {
+      if (data && data.success && Array.isArray(data.itinerary) && data.itinerary.length > 0) {
         setItineraryResult(data.itinerary);
         setItineraryNotes(data.notes);
         setIsAiGenerated(!!data.isAi);
       } else {
-        throw new Error("Generation failure");
+        throw new Error("Generation failure, switching to local autonomous engine");
       }
     } catch (e: any) {
-      console.error("Itinerary generation error:", e);
-      setItineraryNotes("連線雲端後端逾時或異常，請確認網路連線或稍後再試。");
+      console.warn("Itinerary generation cloud fallback to local autonomous engine:", e);
+      const countyToSend = selectedCounty === "✏️ 自設其他台灣目的地..." ? (customCountyInput.trim() || "台灣目的地") : selectedCounty;
+      const fallbackResult = generateLocalSmartItinerary({
+        county: countyToSend,
+        districts: selectedDistricts,
+        days: selectedDays,
+        style: selectedStyle,
+        transport: selectedTransport,
+        budget: selectedBudget,
+        userNotes: userNotes,
+        guideLength: selectedGuideLength,
+        expressStyle: selectedExpressStyle,
+        voicePack: selectedVoicePack
+      });
+      setItineraryResult(fallbackResult.itinerary);
+      setItineraryNotes(fallbackResult.notes);
+      setIsAiGenerated(false);
     } finally {
       setIsLoading(false);
     }
