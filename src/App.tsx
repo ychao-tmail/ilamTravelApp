@@ -625,7 +625,7 @@ export default function App() {
         )}
 
         {/* Dynamic Inner Tab Viewport content area */}
-        <main className="flex-1 p-4 md:p-6 lg:p-8 overflow-y-auto pb-24 md:pb-8">
+        <main className="flex-1 p-4 md:p-6 lg:p-8 overflow-y-auto pb-28 md:pb-8">
           <div id="tab-viewport">
             {activeTab === "explore" && (
               <ExploreTab
@@ -685,8 +685,8 @@ export default function App() {
           </div>
         </main>
 
-        {/* Bottom Tab Bar navigation controls (Mobile Thumb Zone) */}
-        <nav className="md:hidden absolute bottom-0 left-0 right-0 bg-white border-t border-gray-150 py-2.5 px-4 flex justify-between items-center z-40 shadow-lg">
+        {/* Bottom Tab Bar navigation controls (Mobile Thumb Zone - Fixed to screen bottom) */}
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-gray-200 py-2 px-3 flex justify-between items-center shadow-[0_-4px_25px_rgba(0,0,0,0.12)] max-w-md mx-auto">
           
           <button
             onClick={() => setActiveTab("explore")}
