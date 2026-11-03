@@ -387,23 +387,23 @@ export default function ExploreTab({
   const [locationStatusNotice, setLocationStatusNotice] = useState<string | null>(null);
   const [showLocationPicker, setShowLocationPicker] = useState(false);
 
-  // 1. Primary: Hardware GPS Satellite Geolocation
+  // 1. Hardware GPS Satellite Geolocation (戶外精準定位)
   const handleLocateViaGps = async () => {
     setIsLocating(true);
     setLocatingMethod("gps");
-    setLocationStatusNotice("🛰️ 正在連線 GPS 衛星取得精確經緯度 (請允許位置存取)...");
+    setLocationStatusNotice("🛰️ 正在搜尋 GPS 衛星訊號（建議在戶外或靠窗處）...");
 
     try {
       const gpsLoc = await fetchDeviceGeolocation(true);
       setUserCoords(gpsLoc);
-      setLocationStatusNotice(`✅ GPS 衛星精準定位成功：${gpsLoc.countyName}（${gpsLoc.accuracyDesc}）`);
+      setLocationStatusNotice(`✅ GPS 衛星精準鎖定：${gpsLoc.countyName}（${gpsLoc.accuracyDesc}）`);
       if (onUserCountyDetected) {
         const { county } = findClosestTaiwanCounty(gpsLoc.lat, gpsLoc.lng);
         onUserCountyDetected(county.countyKey);
       }
     } catch (err: any) {
       console.warn("GPS locate error:", err);
-      setLocationStatusNotice(`⚠️ ${err?.message || "GPS 定位失敗，請確認已開啟定位權限，或點擊「切換城市」手動選取"}`);
+      setLocationStatusNotice(`⚠️ 若您在建築物內衛星訊號弱，可點擊「📶 行動網路定位」或「📍 切換縣市」！`);
     } finally {
       setIsLocating(false);
       setLocatingMethod(null);
@@ -411,30 +411,42 @@ export default function ExploreTab({
     }
   };
 
-  // 2. Secondary/Fallback: Mobile Network / Cellular IP Location (粗略參考，提示可能受電信商機房影響)
+  // 2. Mobile Network & Cell Tower Location (室內/建築物內定位，無需衛星視線)
   const handleLocateViaMobileNetwork = async () => {
     setIsLocating(true);
     setLocatingMethod("network");
-    setLocationStatusNotice("📶 正在查詢行動網路基地台/IP（註：此為粗估位置，受電信機房影響可能偏離實體）...");
+    setLocationStatusNotice("📶 正在查詢行動網路基地台與 Wi-Fi 定位（室內推薦）...");
 
     try {
-      const netLoc = await fetchMobileNetworkLocation();
+      // First try low-accuracy device network (Wi-Fi / cell tower triangulation, works indoors)
+      let netLoc: DetectedLocation | null = null;
+      try {
+        netLoc = await fetchDeviceGeolocation(false);
+      } catch {
+        // Fallback to IP cellular network
+        netLoc = await fetchMobileNetworkLocation();
+      }
+
       if (netLoc) {
-        setUserCoords({
+        const indoorLoc: DetectedLocation = {
           ...netLoc,
-          name: `${netLoc.countyName}（📶 基地台粗估）`
-        });
-        setLocationStatusNotice(`ℹ️ 已取得行動基地台位置：${netLoc.countyName}（建議使用 GPS 精準定位）`);
+          source: "network",
+          name: `${netLoc.countyName}（📶 行動基地台）`,
+          accuracyDesc: "室內/基地台定位"
+        };
+        setUserCoords(indoorLoc);
+        saveCachedLocation(indoorLoc);
+        setLocationStatusNotice(`✅ 已切換為行動網路定位：${netLoc.countyName}（室內訊號良好）`);
         if (onUserCountyDetected) {
           const { county } = findClosestTaiwanCounty(netLoc.lat, netLoc.lng);
           onUserCountyDetected(county.countyKey);
         }
       } else {
-        setLocationStatusNotice("行動網路基地台查詢無回應，維持目前所在地");
+        setLocationStatusNotice("⚠️ 行動網路基地台查詢無回應，可點選「切換縣市」手動指定");
       }
-    } catch (e) {
+    } catch (e: any) {
       console.warn("Mobile network locate error:", e);
-      setLocationStatusNotice("行動網路訊號不穩，建議改用「GPS 精準定位」");
+      setLocationStatusNotice("行動網路訊號不穩，可點選「切換縣市」手動指定");
     } finally {
       setIsLocating(false);
       setLocatingMethod(null);
@@ -760,9 +772,14 @@ export default function ExploreTab({
                   </span>
                 )}
                 {userCoords.source === "network" && (
-                  <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-400/30 px-2 py-0.5 rounded-full font-mono flex items-center gap-1">
-                    <span>📶 基地台粗估</span>
-                    <span className="text-amber-200/70 text-[9px]">(建議按 GPS 校正)</span>
+                  <span className="text-[10px] bg-sky-500/20 text-sky-300 border border-sky-400/30 px-2 py-0.5 rounded-full font-mono font-bold flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-sky-400 animate-pulse"></span>
+                    <span>📶 行動網路/室內定位</span>
+                  </span>
+                )}
+                {userCoords.source === "manual" && (
+                  <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-400/30 px-2 py-0.5 rounded-full font-mono">
+                    📍 手動自選城市
                   </span>
                 )}
                 {userCoords.source === "cache" && (
@@ -774,46 +791,46 @@ export default function ExploreTab({
             </div>
           </div>
 
-          {/* Action buttons: GPS (Primary), Manual Picker (Secondary), Mobile Network (Tertiary/Fallback) */}
-          <div className="flex items-center gap-2 flex-wrap">
-            {/* PRIMARY: GPS Satellite Location */}
+          {/* Action buttons: GPS (Outdoor), Mobile Network (Indoor), Manual Picker */}
+          <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+            {/* OPTION 1: Hardware GPS (Outdoor) */}
             <button
               onClick={handleLocateViaGps}
               disabled={isLocating}
-              className={`text-xs px-3.5 py-2 rounded-xl font-black flex items-center gap-1.5 transition-all shadow-md active:scale-95 cursor-pointer ${
+              className={`text-xs px-3 py-2 rounded-xl font-black flex items-center gap-1.5 transition-all shadow-xs active:scale-95 cursor-pointer ${
                 userCoords.source === "gps"
                   ? "bg-[#E8A02C] text-[#13294B] hover:bg-[#d9901d] ring-2 ring-[#E8A02C]/60"
-                  : "bg-[#E8A02C] text-[#13294B] hover:bg-[#d9901d]"
+                  : "bg-white/10 hover:bg-white/20 text-amber-300 border border-amber-400/30"
               } disabled:opacity-50`}
-              title="使用手機硬體 GPS 衛星精準定位（最推薦、最精確）"
+              title="適合戶外無遮蔽處，使用手機硬體 GPS 衛星定位（公尺級高精確度）"
             >
-              <Navigation className={`w-3.5 h-3.5 ${locatingMethod === "gps" ? "animate-spin text-[#13294B]" : "fill-current"}`} />
-              <span>{locatingMethod === "gps" ? "🛰️ 正在連線衛星..." : userCoords.source === "gps" ? "🛰️ 重新校準 GPS" : "🛰️ GPS 精準定位"}</span>
+              <Navigation className={`w-3.5 h-3.5 ${locatingMethod === "gps" ? "animate-spin text-current" : "fill-current"}`} />
+              <span>{locatingMethod === "gps" ? "衛星連線中..." : "🛰️ GPS (戶外精準)"}</span>
             </button>
 
-            {/* SECONDARY: Manual Taiwan City Picker */}
+            {/* OPTION 2: Mobile Network / Cell Tower (Indoor) */}
+            <button
+              onClick={handleLocateViaMobileNetwork}
+              disabled={isLocating}
+              className={`text-xs px-3 py-2 rounded-xl font-black flex items-center gap-1.5 transition-all shadow-xs active:scale-95 cursor-pointer ${
+                userCoords.source === "network"
+                  ? "bg-sky-500 text-white hover:bg-sky-600 ring-2 ring-sky-400/60"
+                  : "bg-white/10 hover:bg-white/20 text-sky-200 border border-sky-400/30"
+              } disabled:opacity-50`}
+              title="適合建築物內、地下室、商場或室內（免衛星視線，透過基地台/Wi-Fi定位）"
+            >
+              <Wifi className={`w-3.5 h-3.5 ${locatingMethod === "network" ? "animate-spin text-white" : ""}`} />
+              <span>{locatingMethod === "network" ? "基地台定位中..." : "📶 行動網路 (室內推薦)"}</span>
+            </button>
+
+            {/* OPTION 3: Manual Taiwan City Picker */}
             <button
               onClick={() => setShowLocationPicker(!showLocationPicker)}
-              className="text-xs bg-white/15 hover:bg-white/25 active:scale-95 text-white px-3 py-2 rounded-xl font-bold flex items-center gap-1.5 transition-all border border-white/20 cursor-pointer"
+              className="text-xs bg-white/10 hover:bg-white/20 active:scale-95 text-white px-2.5 sm:px-3 py-2 rounded-xl font-bold flex items-center gap-1 transition-all border border-white/15 cursor-pointer"
               title="手動挑選全台 22 縣市所在位置"
             >
               <MapPin className="w-3.5 h-3.5 text-amber-300" />
               <span>切換縣市</span>
-            </button>
-
-            {/* TERTIARY: Mobile Network Info / Fallback */}
-            <button
-              onClick={handleLocateViaMobileNetwork}
-              disabled={isLocating}
-              className={`text-[10px] px-2.5 py-1.5 rounded-xl font-medium flex items-center gap-1 transition-all border cursor-pointer active:scale-95 ${
-                locatingMethod === "network"
-                  ? "bg-slate-700 text-white border-slate-600"
-                  : "bg-white/5 hover:bg-white/10 text-gray-300 border-white/10"
-              } disabled:opacity-50`}
-              title="使用基地台/IP粗估（註：行動網路可能受電信機房位置影響，不如 GPS 精準）"
-            >
-              <Wifi className={`w-3 h-3 text-gray-400 ${locatingMethod === "network" ? "animate-spin" : ""}`} />
-              <span>{locatingMethod === "network" ? "基地台查詢中..." : "基地台粗估"}</span>
             </button>
           </div>
         </div>
