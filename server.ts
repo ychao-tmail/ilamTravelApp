@@ -8,7 +8,7 @@ import { resolveSpotStory } from "./src/data/taiwanStories.ts";
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+const PORT = 3000;
 
 // Enable CORS for Capacitor Native App (capacitor://localhost, http://localhost) & Web Clients
 app.use((req, res, next) => {
@@ -23,13 +23,8 @@ app.use((req, res, next) => {
 
 app.use(express.json());
 
-// Initialize OpenAI API key if provided
-const OPENAI_KEY_PARTS = [
-  "sk-proj-UlNGt-1jHUmRnnYkCwb7lQjj8_pvVsHm",
-  "_Fk7tYzxr8UVMvl8skkKozxk3-kfURmsW_cX_WDklE",
-  "T3BlbkFJe8vGTMdyBobA5BSXwZVc018BOvVNiYieztOC52mZlgO_LNRDAX8YLVXIKKokDT1gS7h70GuuAA"
-];
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY || OPENAI_KEY_PARTS.join("");
+// Initialize OpenAI API key if provided via environment
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
 const isOpenAiEnabled = !!OPENAI_API_KEY;
 
 // Initialize Gemini SDK if API key is provided
@@ -245,12 +240,13 @@ function getTravelNotes(style: string, transport: string, budget: string): strin
 
 // ENDPOINT 1: GUIDED STORY GENERATION
 app.post("/api/guided-story", async (req, res) => {
-  const { spotName, theme, lengthStyle, voiceStyle, voiceTone } = req.body;
-  const targetSpot = spotName || "台灣景點";
-  const targetTheme = theme || "歷史背景";
-  const lStyle = lengthStyle || "中等";
-  const vStyle = voiceStyle || "經典";
-  const vTone = voiceTone || "專業的主播";
+  try {
+    const { spotName, theme, lengthStyle, voiceStyle, voiceTone } = req.body || {};
+    const targetSpot = spotName || "台灣景點";
+    const targetTheme = theme || "歷史背景";
+    const lStyle = lengthStyle || "中等";
+    const vStyle = voiceStyle || "經典";
+    const vTone = voiceTone || "專業的主播";
 
   if (isGeminiEnabled && ai) {
     try {
@@ -271,8 +267,7 @@ app.post("/api/guided-story", async (req, res) => {
 請直接輸出導覽解說的核心內容文字，不需要任何 markdown 的程式碼標記（如 \`\`\` 等），也不要任何「好的，以下是...」之類的前言或結語，直接開始播報。`;
 
       const result = await generateGeminiWithFallback(prompt, {
-        systemInstruction: `你是一位對全台灣各縣市（台北、新北、基隆、桃園、新竹、苗栗、台中、彰化、南投、雲林、嘉義、台南、高雄、屏東、宜蘭、花蓮、台東、澎湖、金門、馬祖）文史風土、建築美學與常民飲食聊若指掌的頂尖台灣深度導覽與說書大師。你擅長精準根據長度 (${lStyle})、風格 (${vStyle}) 與語音包 (${vTone}) 輸出富含真實歷史細節、文化溫度、現場感的導覽解說。`,
-        temperature: 0.7
+        systemInstruction: `你是一位對全台灣各縣市（台北、新北、基隆、桃園、新竹、苗栗、台中、彰化、南投、雲林、嘉義、台南、高雄、屏東、宜蘭、花蓮、台東、澎湖、金門、馬祖）文史風土、建築美學與常民飲食聊若指掌的頂尖台灣深度導覽與說書大師。你擅長精準根據長度 (${lStyle})、風格 (${vStyle}) 與語音包 (${vTone}) 輸出富含真實歷史細節、文化溫度、現場感的導覽解說。`
       });
 
       if (result && result.text) {
@@ -371,14 +366,19 @@ app.post("/api/guided-story", async (req, res) => {
     voiceStyle: vStyle,
     voiceTone: vTone
   });
+  } catch (err: any) {
+    console.error("Critical error in /api/guided-story:", err);
+    return res.status(500).json({ success: false, error: err?.message || "Failed to generate story" });
+  }
 });
 
 // ENDPOINT 2: ITINERARY PLANNER
 app.post("/api/itinerary-plan", async (req, res) => {
-  const { districts, days, style, transport, budget, userNotes, county, guideLength, expressStyle, voicePack } = req.body;
+  try {
+    const { districts, days, style, transport, budget, userNotes, county, guideLength, expressStyle, voicePack } = req.body || {};
   
-  const numDays = Number(days) || 3;
-  const targetCounty = county || "宜蘭縣";
+    const numDays = Number(days) || 3;
+    const targetCounty = county || "宜蘭縣";
   
   // Parse districts from input (could be array or string)
   let targetDistricts: string[] = [];
@@ -466,8 +466,7 @@ ${userNotes ? `6. 同時滿足旅客的出遊特別需求：${userNotes} (例如
           },
           required: ["days"]
         },
-        systemInstruction: `你是一位對全台灣各縣市（包含台北、新北、基隆、桃園、新竹、苗栗、台中、彰化、南投、雲林、嘉義、台南、高雄、屏東、宜蘭、花蓮、台東、澎湖、金門、馬祖）聊若指掌的頂尖台灣深度導覽與旅程排程專家，精通當地秘境景點、歷史背景、建築特色、在地美食與交通串聯。你擅長輸出格式整潔完美、可以被程式直接讀取解析的標準 JSON 資料規格。`,
-        temperature: 0.7
+        systemInstruction: `你是一位對全台灣各縣市（包含台北、新北、基隆、桃園、新竹、苗栗、台中、彰化、南投、雲林、嘉義、台南、高雄、屏東、宜蘭、花蓮、台東、澎湖、金門、馬祖）聊若指掌的頂尖台灣深度導覽與旅程排程專家，精通當地秘境景點、歷史背景、建築特色、在地美食與交通串聯。你擅長輸出格式整潔完美、可以被程式直接讀取解析的標準 JSON 資料規格。`
       });
 
       // Check geographic rationality / compatibility on server side for Taiwan
@@ -631,6 +630,10 @@ ${userNotes ? `6. 同時滿足旅客的出遊特別需求：${userNotes} (例如
     itinerary: tunedItinerary,
     notes: `${notes} (📢 已啟用的全台灣【${targetCounty}】深旅規劃模擬。在設定中配置 GEMINI_API_KEY 即可解鎖 live AI 實時大模型客製遊！)`
   });
+  } catch (err: any) {
+    console.error("Critical error in /api/itinerary-plan:", err);
+    return res.status(500).json({ success: false, error: err?.message || "Failed to generate itinerary plan" });
+  }
 });
 
 // Setup Vite Dev Server / Prod Serving

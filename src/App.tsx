@@ -77,7 +77,16 @@ export default function App() {
   const [navGuideSpot, setNavGuideSpot] = useState<string | null>(null);
 
   // Cloud Backend Connection State
+  const [appToast, setAppToast] = useState<string | null>(null);
+  const triggerAppToast = (msg: string) => {
+    setAppToast(msg);
+    setTimeout(() => {
+      setAppToast((curr) => (curr === msg ? null : curr));
+    }, 3200);
+  };
+
   const [showServerModal, setShowServerModal] = useState(false);
+  const [showInstallModal, setShowInstallModal] = useState(false);
   const [serverStatus, setServerStatus] = useState<{ checked: boolean; ok: boolean; latencyMs?: number; error?: string }>({
     checked: false,
     ok: true
@@ -95,6 +104,19 @@ export default function App() {
       error: result.error
     });
     setIsTestingServer(false);
+  };
+
+  const handleSaveCustomUrl = () => {
+    apiClient.setCustomBaseUrl(customUrlInput.trim() || null);
+    triggerAppToast("已儲存自訂 API 伺服器網址");
+    testServerConnection();
+  };
+
+  const handleResetDefaultUrl = () => {
+    apiClient.setCustomBaseUrl(null);
+    setCustomUrlInput("");
+    triggerAppToast("已重設為預設伺服器連線");
+    testServerConnection();
   };
 
   // AI Engine & API Key State
@@ -446,7 +468,7 @@ export default function App() {
 
   const handleDeleteItinerary = (id: string) => {
     if (savedItineraries.length <= 1) {
-      alert("請至少保留一份行程！");
+      triggerAppToast("請至少保留一份行程！");
       return;
     }
     const filtered = savedItineraries.filter(item => item.id !== id);
@@ -522,46 +544,88 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#FAF8F5] flex flex-col items-center justify-start py-0 md:py-6 select-none font-sans">
+    <div className="min-h-screen bg-[#FAF8F5] flex flex-col items-center justify-start py-0 md:py-4 lg:py-6 select-none font-sans">
       
-      {/* Mobile-First Shell container with responsive shadow framing */}
-      <div className="w-full max-w-md bg-[#FAF8F5] md:rounded-3xl shadow-xl min-h-screen md:min-h-[820px] flex flex-col justify-between border border-gray-150 relative overflow-hidden">
+      {/* Responsive Shell container: expands smoothly from mobile width to full wide desktop */}
+      <div className="w-full max-w-md md:max-w-4xl lg:max-w-6xl xl:max-w-7xl bg-[#FAF8F5] md:rounded-3xl shadow-xl min-h-screen md:min-h-[880px] flex flex-col justify-between border border-gray-200 relative overflow-hidden transition-all duration-300">
         
-        {/* Top Header navbar with Yilan styling elements */}
-        <header className="bg-[#13294B] text-white px-5 py-3.5 flex justify-between items-center border-b border-[#13294B] relative shadow-xs">
-          <div className="flex items-center gap-2">
-            <span className="p-1 bg-[#E8A02C] text-[#13294B] rounded-lg text-sm">🎒</span>
+        {/* Top Header navbar with responsive layout */}
+        <header className="bg-[#13294B] text-white px-4 md:px-6 py-3.5 flex justify-between items-center border-b border-[#13294B] relative shadow-xs">
+          <div className="flex items-center gap-2.5">
+            <span className="p-1.5 bg-[#E8A02C] text-[#13294B] rounded-xl text-sm font-bold shadow-xs">🎒</span>
             <div>
-              <div className="flex items-center gap-1.5">
-                <h1 className="text-sm font-black tracking-tight font-display">AI深旅 DeepGo</h1>
-                <span className="text-[9px] bg-[#E8A02C]/20 text-[#E8A02C] font-mono font-bold px-1.5 py-0.5 rounded-full border border-[#E8A02C]/40">
-                  v1.3.0
-                </span>
-                <span className="text-[8px] bg-purple-500/20 text-purple-300 font-mono px-1 py-0.5 rounded border border-purple-400/30">
-                  GPT-4o
+              <div className="flex items-center gap-2">
+                <h1 className="text-sm md:text-base font-black tracking-tight font-display">全台 AI 深度旅遊導覽</h1>
+                <span className="text-[10px] bg-[#E8A02C]/20 text-[#E8A02C] font-mono font-bold px-2 py-0.5 rounded-full border border-[#E8A02C]/40 hidden sm:inline-block">
+                  DeepGo 台灣探索
                 </span>
               </div>
-              <p className="text-[9px] text-[#E8A02C]/90 font-mono tracking-wider">AI DEEP GO SMART PLANNER</p>
+              <p className="text-[9px] md:text-[10px] text-[#E8A02C]/90 font-mono tracking-wider">AI STORYTELLING & SMART PLANNER</p>
             </div>
           </div>
+
+          {/* Desktop Navigation Links */}
+          <nav className="hidden md:flex items-center gap-1 lg:gap-2">
+            {[
+              { id: "explore", label: "首頁景點", icon: Compass },
+              { id: "planner", label: "AI 智慧規劃", icon: Sparkles },
+              { id: "itinerary", label: "我的行程", icon: Calendar },
+              { id: "colearn", label: "行程共學", icon: Users },
+              { id: "record", label: "學習紀錄", icon: Award },
+            ].map(({ id, label, icon: Icon }) => (
+              <button
+                key={id}
+                onClick={() => setActiveTab(id)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap ${
+                  activeTab === id
+                    ? "bg-white/20 text-white shadow-xs"
+                    : "text-gray-300 hover:text-white hover:bg-white/10"
+                }`}
+              >
+                <Icon className="w-3.5 h-3.5" />
+                <span>{label}</span>
+              </button>
+            ))}
+          </nav>
           
-          <button
-            onClick={() => {
-              setCustomUrlInput(localStorage.getItem("deepgo_custom_api_url") || "");
-              setShowServerModal(true);
-              testServerConnection();
-            }}
-            className="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 active:scale-95 transition-all px-2.5 py-1 rounded-full font-mono text-[9px] cursor-pointer"
-            title="點擊檢查雲端後端連線狀態與設定"
-          >
-            <span className={`w-1.5 h-1.5 rounded-full ${serverStatus.ok ? "bg-emerald-400 animate-pulse" : "bg-amber-400"}`}></span>
-            <span>{isNativePlatform() ? "APK連網" : "雲端後端"}</span>
-            <span className="text-white/60">⚙️</span>
-          </button>
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            <button
+              onClick={() => setShowInstallModal(true)}
+              className="flex items-center gap-1.5 bg-[#E8A02C] hover:bg-[#d9901d] text-[#13294B] active:scale-95 transition-all px-2.5 sm:px-3 py-1.5 rounded-full font-black text-[10px] sm:text-xs cursor-pointer shadow-xs"
+              title="安裝 App 至手機或取得 APK 方案"
+            >
+              <span>📲</span>
+              <span className="hidden sm:inline">安裝至手機 / APK</span>
+              <span className="sm:hidden">裝到手機</span>
+            </button>
+
+            <button
+              onClick={() => {
+                setCustomUrlInput(localStorage.getItem("deepgo_custom_api_url") || "");
+                setShowServerModal(true);
+                testServerConnection();
+              }}
+              className="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 active:scale-95 transition-all px-2.5 sm:px-3 py-1.5 rounded-full font-mono text-[10px] cursor-pointer"
+              title="點擊檢查後端連線狀態與設定"
+            >
+              <span className={`w-2 h-2 rounded-full ${serverStatus.ok ? "bg-emerald-400" : "bg-amber-400"}`}></span>
+              <span className="hidden sm:inline">{serverStatus.ok ? "AI 引擎正常" : "引擎設定"}</span>
+              <span className="sm:hidden">⚙️</span>
+              <span className="text-white/60 hidden sm:inline">⚙️</span>
+            </button>
+          </div>
         </header>
 
+        {/* Global Floating Toast */}
+        {appToast && (
+          <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50 bg-[#13294B] text-white px-4 py-2.5 rounded-full shadow-2xl flex items-center gap-2 border border-amber-400/50 animate-fade-in text-xs font-semibold">
+            <Info className="w-4 h-4 text-amber-400 shrink-0" />
+            <span>{appToast}</span>
+          </div>
+        )}
+
         {/* Dynamic Inner Tab Viewport content area */}
-        <main className="flex-1 p-5 overflow-y-auto pb-24">
+        <main className="flex-1 p-4 md:p-6 lg:p-8 overflow-y-auto pb-24 md:pb-8">
           <div id="tab-viewport">
             {activeTab === "explore" && (
               <ExploreTab
@@ -621,8 +685,8 @@ export default function App() {
           </div>
         </main>
 
-        {/* Bottom Tab Bar navigation controls (Prompt A requirements) */}
-        <nav className="absolute bottom-0 left-0 right-0 bg-white border-t border-gray-150 py-2.5 px-4 flex justify-between items-center z-40 shadow-lg">
+        {/* Bottom Tab Bar navigation controls (Mobile Thumb Zone) */}
+        <nav className="md:hidden absolute bottom-0 left-0 right-0 bg-white border-t border-gray-150 py-2.5 px-4 flex justify-between items-center z-40 shadow-lg">
           
           <button
             onClick={() => setActiveTab("explore")}
@@ -917,6 +981,92 @@ export default function App() {
                     </button>
                   )}
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Mobile Install / APK Modal */}
+        {showInstallModal && (
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in">
+            <div className="bg-white rounded-3xl max-w-md w-full shadow-2xl border border-gray-150 overflow-hidden flex flex-col max-h-[90vh]">
+              {/* Modal Header */}
+              <div className="bg-[#13294B] text-white p-4.5 flex justify-between items-center">
+                <div className="flex items-center gap-2.5">
+                  <span className="p-2 bg-[#E8A02C] text-[#13294B] rounded-xl text-lg font-bold">📲</span>
+                  <div>
+                    <h3 className="font-bold text-sm font-display leading-tight">安裝 DeepGo 至手機 / APK 指南</h3>
+                    <p className="text-[10px] text-gray-300">支援 Android 原生全螢幕與 GPS 衛星定位</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowInstallModal(false)}
+                  className="text-gray-300 hover:text-white p-1 rounded-full hover:bg-white/10 transition-all cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Modal Body */}
+              <div className="p-5 space-y-4 overflow-y-auto text-xs text-gray-700">
+                {/* Method 1: Instant PWA */}
+                <div className="p-4 bg-emerald-50/80 rounded-2xl border border-emerald-200 space-y-2.5">
+                  <div className="flex items-center gap-2 text-emerald-900 font-bold text-xs">
+                    <span className="p-1 bg-emerald-200 text-emerald-800 rounded-lg text-xs">⚡ 最推薦</span>
+                    <span>免下載 APK 檔案，手機一秒安裝</span>
+                  </div>
+                  <p className="text-[11px] text-emerald-800 leading-relaxed">
+                    本系統已配置標準 PWA 規格，可直接安裝到 Android 手機桌面，無須跳過「不明來源 APK」安全性警告：
+                  </p>
+                  <ol className="list-decimal list-inside text-[11px] text-emerald-900 space-y-1 pl-1">
+                    <li>使用手機 <strong>Chrome / Edge / 三星瀏覽器</strong> 開啟發布網址。</li>
+                    <li>點擊瀏覽器右上角選單（⋮），選擇 <strong>「加到主畫面」</strong> 或 <strong>「安裝應用程式」</strong>。</li>
+                    <li>手機桌面即刻生成獨立 App 圖示，享有原生全螢幕視窗與硬體 <strong>GPS 衛星高精確定位</strong>！</li>
+                  </ol>
+                  <button
+                    onClick={() => {
+                      if (navigator.clipboard) {
+                        navigator.clipboard.writeText("https://ais-pre-52tieby7fyz5lw54fekkjy-40235340333.asia-east1.run.app");
+                        triggerAppToast("已複製手機安裝網址至剪貼簿！");
+                      }
+                    }}
+                    className="w-full py-2 px-3 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl font-bold transition-all text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
+                  >
+                    <span>📋 複製手機安裝連結</span>
+                  </button>
+                </div>
+
+                {/* Method 2: Build Native APK */}
+                <div className="p-4 bg-amber-50/80 rounded-2xl border border-amber-200 space-y-2.5">
+                  <div className="flex items-center gap-2 text-amber-900 font-bold text-xs">
+                    <span className="p-1 bg-amber-200 text-amber-800 rounded-lg text-xs">📦 實體 APK</span>
+                    <span>若需打包成實體 .apk 安裝檔</span>
+                  </div>
+                  <p className="text-[11px] text-amber-800 leading-relaxed">
+                    因雲端開發容器為輕量化 Web 環境（未安裝 2GB+ Android Studio / Gradle 編譯器），若需實體 <code>.apk</code> 檔案，可於電腦終端機透過 Google 官方工具 1 分鐘生成：
+                  </p>
+                  <div className="bg-[#13294B] text-amber-300 p-2.5 rounded-xl font-mono text-[10px] space-y-1 overflow-x-auto select-all">
+                    <p># 方式 A：Google 官方 Bubblewrap（最快）</p>
+                    <p>npx @bubblewrap/cli init --manifest=https://ais-pre-52tieby7fyz5lw54fekkjy-40235340333.asia-east1.run.app/manifest.json</p>
+                    <p>npx @bubblewrap/cli build</p>
+                  </div>
+                  <div className="bg-[#13294B] text-sky-200 p-2.5 rounded-xl font-mono text-[10px] space-y-1 overflow-x-auto select-all">
+                    <p># 方式 B：Capacitor + Android Studio</p>
+                    <p>npm install @capacitor/core @capacitor/cli @capacitor/android</p>
+                    <p>npx cap init DeepGo com.deepgo.taiwan --web-dir dist</p>
+                    <p>npx cap add android && npx cap open android</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="p-3.5 bg-gray-50 border-t border-gray-150 flex justify-end">
+                <button
+                  onClick={() => setShowInstallModal(false)}
+                  className="py-2 px-4 bg-[#13294B] hover:bg-[#1E3E62] text-white rounded-xl text-xs font-bold transition-all cursor-pointer"
+                >
+                  我知道了
+                </button>
               </div>
             </div>
           </div>

@@ -16,16 +16,9 @@ const OPENAI_API_KEY_STORAGE = "deepgo_openai_api_key";
 const OPENAI_MODEL_STORAGE = "deepgo_openai_model";
 const AI_ENGINE_STORAGE = "deepgo_ai_engine"; // 'gpt' | 'gemini' | 'local'
 
-// Reconstructed token without triggering GitHub Push Protection regex
-const KEY_CHUNKS = [
-  "sk-proj-UlNGt-1jHUmRnnYkCwb7lQjj8_pvVsHm",
-  "_Fk7tYzxr8UVMvl8skkKozxk3-kfURmsW_cX_WDklE",
-  "T3BlbkFJe8vGTMdyBobA5BSXwZVc018BOvVNiYieztOC52mZlgO_LNRDAX8YLVXIKKokDT1gS7h70GuuAA"
-];
-
 export function getOpenAIApiKey(): string {
   if (typeof window === "undefined") {
-    return process.env.OPENAI_API_KEY || KEY_CHUNKS.join("");
+    return process.env.OPENAI_API_KEY || "";
   }
   const stored = localStorage.getItem(OPENAI_API_KEY_STORAGE);
   if (stored && stored.trim()) {
@@ -35,7 +28,7 @@ export function getOpenAIApiKey(): string {
   if (envKey && envKey.trim()) {
     return envKey.trim();
   }
-  return KEY_CHUNKS.join("");
+  return "";
 }
 
 export function setOpenAIApiKey(key: string | null) {
@@ -58,8 +51,8 @@ export function setSelectedOpenAIModel(model: string) {
 }
 
 export function getSelectedAiEngine(): "gpt" | "gemini" | "local" {
-  if (typeof window === "undefined") return "gpt";
-  return (localStorage.getItem(AI_ENGINE_STORAGE) as any) || "gpt";
+  if (typeof window === "undefined") return "gemini";
+  return (localStorage.getItem(AI_ENGINE_STORAGE) as any) || "gemini";
 }
 
 export function setSelectedAiEngine(engine: "gpt" | "gemini" | "local") {

@@ -1,17 +1,19 @@
 {
+  "id": "/",
   "short_name": "DeepGo",
   "name": "全台 AI 深度旅遊導覽平台",
+  "description": "結合 AI 故事化語音導覽與行前智慧行程規劃的全台灣深度旅遊平台。",
+  "start_url": "/",
+  "scope": "/",
+  "background_color": "#FAF8F5",
+  "theme_color": "#13294B",
+  "display": "standalone",
+  "orientation": "portrait",
   "icons": [
     {
       "src": "/icon.svg",
       "type": "image/svg+xml",
-      "sizes": "512x512 192x192 any",
-      "purpose": "any maskable"
+      "sizes": "192x192 512x512 any"
     }
-  ],
-  "start_url": "/",
-  "background_color": "#064e3b",
-  "theme_color": "#059669",
-  "display": "standalone",
-  "orientation": "portrait"
+  ]
 }

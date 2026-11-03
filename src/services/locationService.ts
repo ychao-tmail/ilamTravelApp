@@ -12,6 +12,8 @@ export interface DetectedLocation {
   countyName: string;
   source: "network" | "gps" | "cache" | "manual";
   accuracyDesc: string;
+  accuracyMeters?: number;
+  timestamp?: number;
 }
 
 export const TAIWAN_COUNTIES = [
@@ -166,12 +168,11 @@ export async function fetchMobileNetworkLocation(): Promise<DetectedLocation | n
   return null;
 }
 
-// 2. Hardware / Browser Geolocation
-// First tries coarse network location (enableHighAccuracy: false), then falls back or refines
-export function fetchDeviceGeolocation(highAccuracy = false): Promise<DetectedLocation> {
+// 2. Hardware / Browser High-Precision GPS Geolocation (Primary recommended positioning)
+export function fetchDeviceGeolocation(highAccuracy = true): Promise<DetectedLocation> {
   return new Promise((resolve, reject) => {
     if (typeof window === "undefined" || !navigator.geolocation) {
-      reject(new Error("Geolocation not supported by device/environment"));
+      reject(new Error("此裝置或瀏覽器不支援硬體 GPS 定位功能"));
       return;
     }
 
@@ -179,8 +180,9 @@ export function fetchDeviceGeolocation(highAccuracy = false): Promise<DetectedLo
       (pos) => {
         const lat = pos.coords.latitude;
         const lng = pos.coords.longitude;
+        const accuracy = Math.round(pos.coords.accuracy || 15);
         const { county } = findClosestTaiwanCounty(lat, lng);
-        const sourceLabel = highAccuracy ? "🛰️ GPS 精準" : "📶 基地台/Wi-Fi";
+        const sourceLabel = highAccuracy ? "🛰️ GPS 精準" : "📶 裝置粗略定位";
         const locName = `${county.name}（${sourceLabel}）`;
 
         const result: DetectedLocation = {
@@ -189,19 +191,43 @@ export function fetchDeviceGeolocation(highAccuracy = false): Promise<DetectedLo
           name: locName,
           countyName: county.name,
           source: highAccuracy ? "gps" : "network",
-          accuracyDesc: `${Math.round(pos.coords.accuracy || 50)} 公尺範圍內`
+          accuracyDesc: `誤差約 ±${accuracy} 公尺`,
+          accuracyMeters: accuracy,
+          timestamp: Date.now()
         };
         saveCachedLocation(result);
         resolve(result);
       },
       (err) => {
-        reject(err);
+        let msg = "GPS 定位失敗";
+        if (err.code === 1) {
+          msg = "定位權限遭拒絕。請在手機或瀏覽器網址列旁允許「位置資訊」存取";
+        } else if (err.code === 2) {
+          msg = "無法取得 GPS 衛星訊號，請移動至窗邊或室外開闊處再試";
+        } else if (err.code === 3) {
+          msg = "GPS 衛星定位搜尋逾時，請確認手機已開啟「高精確度定位/GPS」";
+        }
+        reject(new Error(msg));
       },
       {
         enableHighAccuracy: highAccuracy,
-        timeout: highAccuracy ? 8000 : 5000,
-        maximumAge: 60000
+        timeout: highAccuracy ? 15000 : 8000,
+        maximumAge: highAccuracy ? 0 : 30000
       }
     );
   });
+}
+
+// Dedicated High-Accuracy GPS trigger with retry
+export async function fetchHighAccuracyGpsLocation(): Promise<DetectedLocation> {
+  try {
+    return await fetchDeviceGeolocation(true);
+  } catch (err: any) {
+    // If high accuracy GPS timed out, try once with coarse device fallback
+    try {
+      return await fetchDeviceGeolocation(false);
+    } catch {
+      throw err;
+    }
+  }
 }

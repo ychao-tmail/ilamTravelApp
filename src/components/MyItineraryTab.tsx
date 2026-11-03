@@ -293,7 +293,7 @@ export default function MyItineraryTab({
                   <p>目前行程表為空</p>
                   {onChangeTab && (
                     <button
-                      _id="goto-planner-btn"
+                      id="goto-planner-btn"
                       onClick={() => onChangeTab("planner")}
                       className="bg-[#13294B] text-white px-4 py-2 rounded-xl text-xs font-semibold inline-block mx-auto"
                     >

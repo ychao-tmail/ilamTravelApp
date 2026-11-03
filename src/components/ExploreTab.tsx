@@ -387,92 +387,79 @@ export default function ExploreTab({
   const [locationStatusNotice, setLocationStatusNotice] = useState<string | null>(null);
   const [showLocationPicker, setShowLocationPicker] = useState(false);
 
-  // 1. Mobile Network Location (4G/5G 行動網路基地台定位 - 室內外皆可秒速定位，不需等待 GPS 衛星)
-  const handleLocateViaMobileNetwork = async () => {
-    setIsLocating(true);
-    setLocatingMethod("network");
-    setLocationStatusNotice("📶 正在以行動網路基地台定位所在地...");
-
-    try {
-      const netLoc = await fetchMobileNetworkLocation();
-      if (netLoc) {
-        setUserCoords(netLoc);
-        setLocationStatusNotice(`✅ 已由行動網路定位：${netLoc.countyName}`);
-        if (onUserCountyDetected) {
-          const { county } = findClosestTaiwanCounty(netLoc.lat, netLoc.lng);
-          onUserCountyDetected(county.countyKey);
-        }
-      } else {
-        setLocationStatusNotice("行動網路定位查詢逾時，維持目前所在地");
-      }
-    } catch (e) {
-      console.warn("Mobile network locate error:", e);
-      setLocationStatusNotice("行動網路訊號不穩，請稍候再試");
-    } finally {
-      setIsLocating(false);
-      setLocatingMethod(null);
-      setTimeout(() => setLocationStatusNotice(null), 4000);
-    }
-  };
-
-  // 2. GPS Satellite / Device Hardware Location
+  // 1. Primary: Hardware GPS Satellite Geolocation
   const handleLocateViaGps = async () => {
     setIsLocating(true);
     setLocatingMethod("gps");
-    setLocationStatusNotice("🛰️ 正在連線 GPS 衛星偵測精準位置...");
+    setLocationStatusNotice("🛰️ 正在連線 GPS 衛星取得精確經緯度 (請允許位置存取)...");
 
     try {
       const gpsLoc = await fetchDeviceGeolocation(true);
       setUserCoords(gpsLoc);
-      setLocationStatusNotice(`✅ GPS 衛星精準定位成功：${gpsLoc.countyName}`);
+      setLocationStatusNotice(`✅ GPS 衛星精準定位成功：${gpsLoc.countyName}（${gpsLoc.accuracyDesc}）`);
       if (onUserCountyDetected) {
         const { county } = findClosestTaiwanCounty(gpsLoc.lat, gpsLoc.lng);
         onUserCountyDetected(county.countyKey);
       }
     } catch (err: any) {
-      console.log("GPS locate unavailable or denied, falling back to mobile network:", err);
-      setLocationStatusNotice("GPS 訊號弱，自動切換為行動網路基地台定位...");
-      // Auto fallback to cellular network
+      console.warn("GPS locate error:", err);
+      setLocationStatusNotice(`⚠️ ${err?.message || "GPS 定位失敗，請確認已開啟定位權限，或點擊「切換城市」手動選取"}`);
+    } finally {
+      setIsLocating(false);
+      setLocatingMethod(null);
+      setTimeout(() => setLocationStatusNotice(null), 5000);
+    }
+  };
+
+  // 2. Secondary/Fallback: Mobile Network / Cellular IP Location (粗略參考，提示可能受電信商機房影響)
+  const handleLocateViaMobileNetwork = async () => {
+    setIsLocating(true);
+    setLocatingMethod("network");
+    setLocationStatusNotice("📶 正在查詢行動網路基地台/IP（註：此為粗估位置，受電信機房影響可能偏離實體）...");
+
+    try {
       const netLoc = await fetchMobileNetworkLocation();
       if (netLoc) {
-        setUserCoords(netLoc);
-        setLocationStatusNotice(`✅ 已自動切換為行動網路定位：${netLoc.countyName}`);
+        setUserCoords({
+          ...netLoc,
+          name: `${netLoc.countyName}（📶 基地台粗估）`
+        });
+        setLocationStatusNotice(`ℹ️ 已取得行動基地台位置：${netLoc.countyName}（建議使用 GPS 精準定位）`);
         if (onUserCountyDetected) {
           const { county } = findClosestTaiwanCounty(netLoc.lat, netLoc.lng);
           onUserCountyDetected(county.countyKey);
         }
+      } else {
+        setLocationStatusNotice("行動網路基地台查詢無回應，維持目前所在地");
       }
+    } catch (e) {
+      console.warn("Mobile network locate error:", e);
+      setLocationStatusNotice("行動網路訊號不穩，建議改用「GPS 精準定位」");
     } finally {
       setIsLocating(false);
       setLocatingMethod(null);
-      setTimeout(() => setLocationStatusNotice(null), 4000);
+      setTimeout(() => setLocationStatusNotice(null), 5000);
     }
   };
 
   // Auto detect location on initial app launch:
-  // Immediately attempts Mobile Network (instant) + attempts coarse device geolocation
+  // Strictly prioritizes GPS satellite location, avoiding inaccurate cellular IP overrides
   useEffect(() => {
-    // Immediate non-blocking mobile network location fetch
-    fetchMobileNetworkLocation().then((netLoc) => {
-      if (netLoc) {
-        setUserCoords(netLoc);
-        if (onUserCountyDetected) {
-          const { county } = findClosestTaiwanCounty(netLoc.lat, netLoc.lng);
-          onUserCountyDetected(county.countyKey);
+    // Attempt high accuracy GPS on start
+    fetchDeviceGeolocation(true)
+      .then((gpsLoc) => {
+        if (gpsLoc) {
+          setUserCoords(gpsLoc);
+          if (onUserCountyDetected) {
+            const { county } = findClosestTaiwanCounty(gpsLoc.lat, gpsLoc.lng);
+            onUserCountyDetected(county.countyKey);
+          }
         }
-      }
-    }).catch(() => {});
-
-    // Also attempt coarse device geolocation if available
-    fetchDeviceGeolocation(false).then((geoLoc) => {
-      if (geoLoc) {
-        setUserCoords(geoLoc);
-        if (onUserCountyDetected) {
-          const { county } = findClosestTaiwanCounty(geoLoc.lat, geoLoc.lng);
-          onUserCountyDetected(county.countyKey);
-        }
-      }
-    }).catch(() => {});
+      })
+      .catch((err) => {
+        // If GPS is not yet permitted on initial boot, preserve cached/default location without forcing inaccurate IP
+        console.log("Initial GPS auto-detect waiting for user permission:", err?.message);
+      });
   }, []);
 
   // Voice/audio custom controls
@@ -625,10 +612,17 @@ export default function ExploreTab({
     }
   };
 
+  const triggerToast = (msg: string) => {
+    setToastMsg(msg);
+    setTimeout(() => {
+      setToastMsg((current) => (current === msg ? null : current));
+    }, 3200);
+  };
+
   // Audio Playback with Web Speech API
   const handleToggleAudio = () => {
     if (!window.speechSynthesis) {
-      alert("您的瀏覽器尚不支援內建語音播放 Web Speech API。");
+      triggerToast("您的瀏覽器尚不支援內建語音播放 Web Speech API。");
       return;
     }
 
@@ -756,64 +750,70 @@ export default function ExploreTab({
                 <span className="font-bold text-amber-300 underline decoration-amber-400/50 underline-offset-2">
                   {userCoords.name}
                 </span>
-                {userCoords.source === "network" && (
-                  <span className="text-[9px] bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 px-1.5 py-0.2 rounded font-mono flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                    📶 行動網路定位
+                {userCoords.source === "gps" && (
+                  <span className="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 px-2 py-0.5 rounded-full font-mono font-bold flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <span>🛰️ GPS 精準鎖定</span>
+                    {userCoords.accuracyDesc && (
+                      <span className="text-emerald-200/80 font-normal">({userCoords.accuracyDesc})</span>
+                    )}
                   </span>
                 )}
-                {userCoords.source === "gps" && (
-                  <span className="text-[9px] bg-sky-500/20 text-sky-300 border border-sky-400/30 px-1.5 py-0.2 rounded font-mono flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-sky-400"></span>
-                    🛰️ GPS 精準
+                {userCoords.source === "network" && (
+                  <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-400/30 px-2 py-0.5 rounded-full font-mono flex items-center gap-1">
+                    <span>📶 基地台粗估</span>
+                    <span className="text-amber-200/70 text-[9px]">(建議按 GPS 校正)</span>
                   </span>
                 )}
                 {userCoords.source === "cache" && (
                   <span className="text-[9px] bg-amber-500/20 text-amber-300 border border-amber-400/30 px-1.5 py-0.2 rounded font-mono">
-                    ⚡ 自動記憶位置
+                    ⚡ 記憶位置
                   </span>
                 )}
               </p>
             </div>
           </div>
 
-          {/* Action buttons: Mobile Network, GPS, Manual Location Picker */}
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <button
-              onClick={handleLocateViaMobileNetwork}
-              disabled={isLocating}
-              className={`text-[10px] px-2.5 py-1.5 rounded-xl font-bold flex items-center gap-1 transition-all border cursor-pointer active:scale-95 ${
-                locatingMethod === "network"
-                  ? "bg-emerald-500 text-white border-emerald-400"
-                  : "bg-white/10 hover:bg-white/20 text-white border-white/15"
-              } disabled:opacity-50`}
-              title="使用 4G/5G 行動網路基地台快速定位（免等待衛星，室內外皆可）"
-            >
-              <Wifi className={`w-3.5 h-3.5 text-emerald-300 ${locatingMethod === "network" ? "animate-spin" : ""}`} />
-              <span>{locatingMethod === "network" ? "網路定位中..." : "行動網路定位"}</span>
-            </button>
-
+          {/* Action buttons: GPS (Primary), Manual Picker (Secondary), Mobile Network (Tertiary/Fallback) */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* PRIMARY: GPS Satellite Location */}
             <button
               onClick={handleLocateViaGps}
               disabled={isLocating}
-              className={`text-[10px] px-2.5 py-1.5 rounded-xl font-bold flex items-center gap-1 transition-all border cursor-pointer active:scale-95 ${
-                locatingMethod === "gps"
-                  ? "bg-amber-500 text-white border-amber-400"
-                  : "bg-white/10 hover:bg-white/20 text-white border-white/15"
+              className={`text-xs px-3.5 py-2 rounded-xl font-black flex items-center gap-1.5 transition-all shadow-md active:scale-95 cursor-pointer ${
+                userCoords.source === "gps"
+                  ? "bg-[#E8A02C] text-[#13294B] hover:bg-[#d9901d] ring-2 ring-[#E8A02C]/60"
+                  : "bg-[#E8A02C] text-[#13294B] hover:bg-[#d9901d]"
               } disabled:opacity-50`}
-              title="使用手機硬體 GPS 衛星精準定位"
+              title="使用手機硬體 GPS 衛星精準定位（最推薦、最精確）"
             >
-              <Navigation className={`w-3.5 h-3.5 text-[#E8A02C] ${locatingMethod === "gps" ? "animate-spin" : ""}`} />
-              <span>{locatingMethod === "gps" ? "GPS搜尋中..." : "GPS精準"}</span>
+              <Navigation className={`w-3.5 h-3.5 ${locatingMethod === "gps" ? "animate-spin text-[#13294B]" : "fill-current"}`} />
+              <span>{locatingMethod === "gps" ? "🛰️ 正在連線衛星..." : userCoords.source === "gps" ? "🛰️ 重新校準 GPS" : "🛰️ GPS 精準定位"}</span>
             </button>
 
+            {/* SECONDARY: Manual Taiwan City Picker */}
             <button
               onClick={() => setShowLocationPicker(!showLocationPicker)}
-              className="text-[10px] bg-white/10 hover:bg-white/20 active:scale-95 text-white px-2.5 py-1.5 rounded-xl font-bold flex items-center gap-1 transition-all border border-white/15 cursor-pointer"
+              className="text-xs bg-white/15 hover:bg-white/25 active:scale-95 text-white px-3 py-2 rounded-xl font-bold flex items-center gap-1.5 transition-all border border-white/20 cursor-pointer"
               title="手動挑選全台 22 縣市所在位置"
             >
               <MapPin className="w-3.5 h-3.5 text-amber-300" />
-              <span>切換城市</span>
+              <span>切換縣市</span>
+            </button>
+
+            {/* TERTIARY: Mobile Network Info / Fallback */}
+            <button
+              onClick={handleLocateViaMobileNetwork}
+              disabled={isLocating}
+              className={`text-[10px] px-2.5 py-1.5 rounded-xl font-medium flex items-center gap-1 transition-all border cursor-pointer active:scale-95 ${
+                locatingMethod === "network"
+                  ? "bg-slate-700 text-white border-slate-600"
+                  : "bg-white/5 hover:bg-white/10 text-gray-300 border-white/10"
+              } disabled:opacity-50`}
+              title="使用基地台/IP粗估（註：行動網路可能受電信機房位置影響，不如 GPS 精準）"
+            >
+              <Wifi className={`w-3 h-3 text-gray-400 ${locatingMethod === "network" ? "animate-spin" : ""}`} />
+              <span>{locatingMethod === "network" ? "基地台查詢中..." : "基地台粗估"}</span>
             </button>
           </div>
         </div>
@@ -1022,7 +1022,7 @@ export default function ExploreTab({
             找不到符合的台灣探索景點，請嘗試更換搜尋關鍵字或分區。
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredSpots.map((spot) => {
               const unlockedList = unlockedStories[spot.name] || [];
               const isVisited = visitedSpots.includes(spot.name);
@@ -1397,7 +1397,7 @@ export default function ExploreTab({
                         onClick={() => {
                           if (navigator.clipboard) {
                             navigator.clipboard.writeText(guideText || "");
-                            alert("已複製說書詞至剪貼簿！");
+                            triggerToast("已複製說書詞至剪貼簿！");
                           }
                         }}
                         className="text-[11px] text-gray-500 hover:text-gray-800 font-semibold flex items-center gap-1 cursor-pointer"
@@ -1567,7 +1567,7 @@ export default function ExploreTab({
                       highlight: activeSpot.intro.slice(0, 25) + "...",
                       theme: selectedTheme
                     });
-                    alert(`已將「${activeSpot.name}」加入您的行程！`);
+                    triggerToast(`已將「${activeSpot.name}」加入您的行程！`);
                   }}
                   className="py-2 px-4 bg-[#13294B] hover:bg-[#1E3E62] text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ml-auto"
                 >
@@ -1576,6 +1576,14 @@ export default function ExploreTab({
               )}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Floating Toast Notification */}
+      {toastMsg && (
+        <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50 bg-[#13294B] text-white px-4 py-2.5 rounded-full shadow-2xl flex items-center gap-2 border border-emerald-400/40 animate-fade-in text-xs font-semibold">
+          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span>{toastMsg}</span>
         </div>
       )}
     </div>
