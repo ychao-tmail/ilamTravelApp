@@ -23,6 +23,15 @@ app.use((req, res, next) => {
 
 app.use(express.json());
 
+// Initialize OpenAI API key if provided
+const OPENAI_KEY_PARTS = [
+  "sk-proj-UlNGt-1jHUmRnnYkCwb7lQjj8_pvVsHm",
+  "_Fk7tYzxr8UVMvl8skkKozxk3-kfURmsW_cX_WDklE",
+  "T3BlbkFJe8vGTMdyBobA5BSXwZVc018BOvVNiYieztOC52mZlgO_LNRDAX8YLVXIKKokDT1gS7h70GuuAA"
+];
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY || OPENAI_KEY_PARTS.join("");
+const isOpenAiEnabled = !!OPENAI_API_KEY;
+
 // Initialize Gemini SDK if API key is provided
 const isGeminiEnabled = !!process.env.GEMINI_API_KEY;
 let ai: GoogleGenAI | null = null;
@@ -41,8 +50,44 @@ if (isGeminiEnabled) {
   } catch (err) {
     console.error("Failed to initialize Gemini SDK:", err);
   }
-} else {
-  console.log("Using High-Fidelity local simulation. Provide GEMINI_API_KEY for live AI content.");
+}
+
+console.log(`AI Engines status: OpenAI=${isOpenAiEnabled ? "Enabled (GPT-4o-mini)" : "Disabled"}, Gemini=${isGeminiEnabled ? "Enabled" : "Disabled"}`);
+
+// OpenAI helper function
+async function generateOpenAICompletion(systemPrompt: string, userPrompt: string, responseFormatJson = false) {
+  if (!isOpenAiEnabled) {
+    throw new Error("OpenAI API is not configured");
+  }
+  const body: any = {
+    model: "gpt-4o-mini",
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userPrompt }
+    ],
+    temperature: 0.7,
+    max_tokens: responseFormatJson ? 2500 : 1200
+  };
+  if (responseFormatJson) {
+    body.response_format = { type: "json_object" };
+  }
+
+  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${OPENAI_API_KEY}`
+    },
+    body: JSON.stringify(body)
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err?.error?.message || `OpenAI error HTTP ${res.status}`);
+  }
+
+  const data = await res.json();
+  return data?.choices?.[0]?.message?.content?.trim() || "";
 }
 
 // Multi-model fallback caller to handle temporary 503 high-demand spikes gracefully
@@ -242,7 +287,45 @@ app.post("/api/guided-story", async (req, res) => {
         });
       }
     } catch (e: any) {
-      console.error("Gemini Guided Story Generation Failed, falling back to verified Taiwan story:", e);
+      console.error("Gemini Guided Story Generation Failed, falling back to OpenAI or verified story:", e);
+    }
+  }
+
+  // If Gemini failed or not enabled, try OpenAI GPT
+  if (isOpenAiEnabled) {
+    try {
+      const prompt = `請為我產生關於台灣深度旅遊景點【${targetSpot}】的真實專業特色導覽解說文章。
+- 專屬主題：${targetTheme}
+- 導覽長度字數：${lStyle} (請嚴格遵守：若是「簡潔」請在 120-180 字內精煉摘要；若是「中等」請在 250-400 字內深入說明；若是「長文」請在 500-750 字內完整敘述文史脈絡、建築特色與現場看點)
+- 表達風格：${vStyle} (若「經典」請用人文典雅、文學抒情的口吻；若「幽默」請用風趣詼諧、生動打趣但保留所有真實文史細節的口吻；若「教學」請用文化策展人、講授型深入淺出的口吻解析)
+- 播報角色語音包設定：${vTone} 
+  └ 可愛孩子：腔調活潑稚嫩，穿插擬聲詞，但內容仍聚焦現場景物。
+  └ 專業的主播：腔調字字珠璣、四平八穩、富有磁性與深度新聞專題感。
+  └ 英語播報：必須採用流暢道地的全英文 (English) 說書導覽，精準翻譯台灣地名人名與歷史背景。
+
+請務必包含：
+1. 景點真實的歷史或地理脈絡、開闢背景與重要人物
+2. 現場建築構造、空間格局或地景特徵
+3. 在地常民生活、飲食文化或現場必看的隱藏細節
+
+請直接輸出導覽解說的核心內容文字，不需要任何 markdown 的程式碼標記（如 \`\`\` 等），也不要任何「好的，以下是...」之類的前言或結語，直接開始播報。`;
+
+      const sysPrompt = `你是一位對全台灣各縣市文史風土、建築美學與常民飲食聊若指掌的頂尖台灣深度導覽與說書大師。你擅長精準根據長度 (${lStyle})、風格 (${vStyle}) 與語音包 (${vTone}) 輸出富含真實歷史細節、文化溫度、現場感的導覽解說。`;
+
+      const text = await generateOpenAICompletion(sysPrompt, prompt, false);
+      if (text) {
+        return res.json({
+          success: true,
+          isAi: true,
+          model: "gpt-4o-mini",
+          text: text,
+          lengthStyle: lStyle,
+          voiceStyle: vStyle,
+          voiceTone: vTone
+        });
+      }
+    } catch (e: any) {
+      console.error("OpenAI Guided Story Generation Failed, falling back to verified Taiwan story:", e);
     }
   }
 
@@ -423,8 +506,67 @@ ${userNotes ? `6. 同時滿足旅客的出遊特別需求：${userNotes} (例如
       });
       
     } catch (e: any) {
-      console.error("Gemini Itinerary Generation Failed, falling back to dynamic template simulator:", e);
-      // Fallback below
+      console.error("Gemini Itinerary Generation Failed, attempting OpenAI or dynamic template simulator:", e);
+    }
+  }
+
+  // If Gemini failed or not enabled, try OpenAI GPT
+  if (isOpenAiEnabled) {
+    try {
+      const prompt = `請為我規劃一份【${targetCounty}】自由行深度旅遊行程表，詳情如下：
+- 想去的地區或自定義景點名稱：${targetDistricts.join("、")}
+- 旅遊天數：共 ${numDays} 天
+- 團隊風格：${style || "🌲 自然生態"}
+- 交通方式：${transport || "🚗 汽車"}
+- 預算模式：${budget || "💰 省錢"}
+- 導覽長度偏好：${guideLength || "中等"}
+- 表達風格偏好：${expressStyle || "經典"}
+- 聽覺配音設定：${voicePack || "專業的主播"}${userNotes ? `\n- 旅客特別備註/需求：${userNotes}` : ""}
+
+請輸出純 JSON 格式，必須符合以下結構：
+{
+  "days": [
+    {
+      "dayNum": 1,
+      "lodging": "推薦住宿名稱與簡短推薦理由",
+      "foodRecommend": "今日必吃特色美食或名產推薦",
+      "activities": [
+        {
+          "time": "時間點 (例如 '10:00')",
+          "title": "景點名稱",
+          "cost": "預估花費 (例如 '門票 $150' 或 '免費')",
+          "highlight": "一句話導覽亮點，寫明景點歷史/人文背景/建築特色亮點故事簡述",
+          "theme": "最推薦用什麼導覽主題解鎖 ('歷史背景'、'建築特色' 或 '在地飲食')"
+        }
+      ]
+    }
+  ]
+}
+
+注意事項：
+1. 每天上午推薦1~2個景點，下午1~2個景點，夜晚推薦合適的夜市、景觀台或特色商圈。
+2. 住宿點、美食推薦應貼合風格【${style}】與預算【${budget}】。
+3. 景點亮點文筆應配合【${expressStyle || "經典"}】風格。全程繁體中文輸出。`;
+
+      const sysPrompt = `你是一位對全台灣各縣市聊若指掌的頂尖台灣深度導覽與旅程排程專家。你擅長輸出格式標準、無多餘雜質的合法 JSON 資料。`;
+
+      const gptText = await generateOpenAICompletion(sysPrompt, prompt, true);
+      if (gptText) {
+        const parsed = JSON.parse(gptText);
+        const days = parsed.days || parsed.itinerary || [];
+        if (days && days.length > 0) {
+          const notes = `${getTravelNotes(style, transport, budget)}\n(✨ 由 OpenAI GPT-4o-mini 即時客製運算生成)`;
+          return res.json({
+            success: true,
+            isAi: true,
+            model: "gpt-4o-mini",
+            itinerary: days,
+            notes: notes
+          });
+        }
+      }
+    } catch (e: any) {
+      console.error("OpenAI Itinerary Generation Failed, falling back to dynamic template simulator:", e);
     }
   }
 

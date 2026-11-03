@@ -7,6 +7,15 @@ import LearningRecordTab from "./components/LearningRecordTab";
 import ColearnTab from "./components/ColearnTab";
 import { DayItinerary, SavedItinerary } from "./types";
 import { apiClient, isNativePlatform, DEFAULT_CLOUD_BACKEND_URL } from "./api/client";
+import { 
+  getOpenAIApiKey, 
+  setOpenAIApiKey, 
+  getSelectedOpenAIModel, 
+  setSelectedOpenAIModel, 
+  getSelectedAiEngine, 
+  setSelectedAiEngine,
+  testOpenAIConnection 
+} from "./services/gptService";
 
 // Flagship default itinerary covering Taiwan nationwide
 const DEFAULT_ITINERARY: DayItinerary[] = [
@@ -88,15 +97,40 @@ export default function App() {
     setIsTestingServer(false);
   };
 
-  const handleSaveCustomUrl = () => {
-    apiClient.setCustomBaseUrl(customUrlInput.trim() || null);
-    testServerConnection();
+  // AI Engine & API Key State
+  const [openAiKeyInput, setOpenAiKeyInput] = useState(getOpenAIApiKey());
+  const [selectedEngine, setSelectedEngine] = useState<"gpt" | "gemini" | "local">(getSelectedAiEngine());
+  const [selectedModel, setSelectedModel] = useState<string>(getSelectedOpenAIModel());
+  const [openAiStatus, setOpenAiStatus] = useState<{ checked: boolean; ok: boolean; latencyMs?: number; error?: string }>({
+    checked: false,
+    ok: true
+  });
+  const [isTestingOpenAi, setIsTestingOpenAi] = useState(false);
+
+  const testOpenAiDirect = async (keyToTest?: string) => {
+    setIsTestingOpenAi(true);
+    const result = await testOpenAIConnection(keyToTest || openAiKeyInput);
+    setOpenAiStatus({
+      checked: true,
+      ok: result.ok,
+      latencyMs: result.latencyMs,
+      error: result.error
+    });
+    setIsTestingOpenAi(false);
   };
 
-  const handleResetDefaultUrl = () => {
-    apiClient.setCustomBaseUrl(null);
-    setCustomUrlInput("");
-    testServerConnection();
+  const handleSaveOpenAiConfig = () => {
+    setOpenAIApiKey(openAiKeyInput.trim() || null);
+    setSelectedAiEngine(selectedEngine);
+    setSelectedOpenAIModel(selectedModel);
+    testOpenAiDirect(openAiKeyInput.trim());
+  };
+
+  const handleResetOpenAiKey = () => {
+    setOpenAIApiKey(null);
+    setOpenAiKeyInput(getOpenAIApiKey());
+    setSelectedAiEngine("gpt");
+    testOpenAiDirect(getOpenAIApiKey());
   };
 
   const handleOpenSpotGuide = (spotName: string) => {
@@ -501,7 +535,10 @@ export default function App() {
               <div className="flex items-center gap-1.5">
                 <h1 className="text-sm font-black tracking-tight font-display">AI深旅 DeepGo</h1>
                 <span className="text-[9px] bg-[#E8A02C]/20 text-[#E8A02C] font-mono font-bold px-1.5 py-0.5 rounded-full border border-[#E8A02C]/40">
-                  v1.2.0
+                  v1.3.0
+                </span>
+                <span className="text-[8px] bg-purple-500/20 text-purple-300 font-mono px-1 py-0.5 rounded border border-purple-400/30">
+                  GPT-4o
                 </span>
               </div>
               <p className="text-[9px] text-[#E8A02C]/90 font-mono tracking-wider">AI DEEP GO SMART PLANNER</p>
@@ -653,9 +690,9 @@ export default function App() {
                   <div>
                     <div className="flex items-center gap-1.5">
                       <h3 className="font-bold text-sm font-display leading-tight">雲端後端連線狀態</h3>
-                      <span className="text-[9px] bg-white/20 text-white font-mono px-1.5 py-0.2 rounded font-medium">v1.2.0</span>
+                      <span className="text-[9px] bg-white/20 text-white font-mono px-1.5 py-0.2 rounded font-medium">v1.3.0</span>
                     </div>
-                    <p className="text-[10px] text-gray-300">APK 原生連線與 API 路由設定</p>
+                    <p className="text-[10px] text-gray-300">OpenAI GPT / 雲端後端 / 原生引擎設定</p>
                   </div>
                 </div>
                 <button
@@ -729,13 +766,125 @@ export default function App() {
                   </p>
                 </div>
 
+                {/* AI Engine & OpenAI GPT Key Configuration Section */}
+                <div className="p-3.5 bg-purple-50/80 rounded-2xl border border-purple-200/90 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <span className="p-1 bg-purple-600 text-white rounded-lg text-xs">🤖</span>
+                      <span className="font-bold text-xs text-purple-900">AI 核心大模型設定</span>
+                    </div>
+                    <span className="text-[9px] bg-purple-200 text-purple-800 font-bold px-2 py-0.5 rounded-full">
+                      OpenAI GPT
+                    </span>
+                  </div>
+
+                  {/* Engine Selection */}
+                  <div className="space-y-1">
+                    <span className="text-[11px] font-bold text-purple-900 block">偏好運算引擎：</span>
+                    <div className="grid grid-cols-3 gap-1 text-[11px]">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedEngine("gpt")}
+                        className={`py-1.5 px-2 rounded-xl font-bold border transition-all cursor-pointer ${
+                          selectedEngine === "gpt"
+                            ? "bg-purple-600 text-white border-purple-700 shadow-xs"
+                            : "bg-white text-gray-700 border-purple-200 hover:bg-purple-100/50"
+                        }`}
+                      >
+                        ⚡ OpenAI GPT
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedEngine("gemini")}
+                        className={`py-1.5 px-2 rounded-xl font-bold border transition-all cursor-pointer ${
+                          selectedEngine === "gemini"
+                            ? "bg-purple-600 text-white border-purple-700 shadow-xs"
+                            : "bg-white text-gray-700 border-purple-200 hover:bg-purple-100/50"
+                        }`}
+                      >
+                        🌟 Gemini 雲端
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedEngine("local")}
+                        className={`py-1.5 px-2 rounded-xl font-bold border transition-all cursor-pointer ${
+                          selectedEngine === "local"
+                            ? "bg-purple-600 text-white border-purple-700 shadow-xs"
+                            : "bg-white text-gray-700 border-purple-200 hover:bg-purple-100/50"
+                        }`}
+                      >
+                        🛡️ 離線原生
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* OpenAI API Key Input */}
+                  <div className="space-y-1 pt-1">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[11px] font-bold text-purple-900 block">
+                        OpenAI API Key（GPT 專用金鑰）：
+                      </label>
+                      {openAiStatus.checked && (
+                        <span className={`text-[10px] font-bold ${openAiStatus.ok ? "text-emerald-600" : "text-red-500"}`}>
+                          {openAiStatus.ok ? `🟢 通訊成功 (${openAiStatus.latencyMs}ms)` : "🔴 驗證失敗"}
+                        </span>
+                      )}
+                    </div>
+                    <input
+                      type="password"
+                      placeholder="sk-proj-..."
+                      value={openAiKeyInput}
+                      onChange={(e) => setOpenAiKeyInput(e.target.value)}
+                      className="w-full bg-white border border-purple-200 rounded-xl p-2.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-purple-600 text-purple-950"
+                    />
+                    <div className="flex items-center justify-between text-[10px] text-purple-700/80 pt-0.5">
+                      <span>已預載您提供的 GPT 金鑰，手機 APK 與網頁皆可秒速調用！</span>
+                    </div>
+                  </div>
+
+                  {/* Model Choice */}
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-purple-900 block">GPT 模型版本：</label>
+                    <select
+                      value={selectedModel}
+                      onChange={(e) => setSelectedModel(e.target.value)}
+                      className="w-full bg-white border border-purple-200 rounded-xl p-2 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-purple-600 text-purple-950"
+                    >
+                      <option value="gpt-4o-mini">gpt-4o-mini（極速推薦，說書與行程排定首選）</option>
+                      <option value="gpt-4o">gpt-4o（高智慧旗艦版，文筆極其豐富細膩）</option>
+                      <option value="gpt-4-turbo">gpt-4-turbo</option>
+                    </select>
+                  </div>
+
+                  {/* Test & Save OpenAI Config */}
+                  <div className="flex items-center gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => testOpenAiDirect()}
+                      disabled={isTestingOpenAi}
+                      className="flex-1 py-1.5 px-2 bg-purple-100 hover:bg-purple-200 text-purple-900 rounded-xl font-bold transition-all text-xs flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50"
+                    >
+                      <RefreshCw className={`w-3 h-3 ${isTestingOpenAi ? "animate-spin" : ""}`} />
+                      <span>{isTestingOpenAi ? "驗證中..." : "測試 GPT 連線"}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSaveOpenAiConfig}
+                      className="flex-1 py-1.5 px-2 bg-purple-700 hover:bg-purple-800 text-white rounded-xl font-bold transition-all text-xs flex items-center justify-center gap-1 cursor-pointer"
+                    >
+                      <Check className="w-3 h-3" />
+                      <span>儲存 GPT 設定</span>
+                    </button>
+                  </div>
+                </div>
+
                 {/* Dual Engine Info Badge */}
                 <div className="p-3 bg-blue-50/70 rounded-2xl border border-blue-200/80 space-y-1.5">
                   <div className="flex items-center gap-1.5">
-                    <span className="text-blue-700 font-bold text-xs">🛡️ 雙模高可用韌性保障</span>
+                    <span className="text-blue-700 font-bold text-xs">🛡️ 雙模三重高可用韌性保障</span>
                   </div>
                   <p className="text-[11px] text-blue-900 leading-relaxed">
-                    本 APK 內建台灣 22 縣市完整文史景點與行程數據。無論在飛機上、山區收訊不良或無後端伺服器環境，皆能 100% 順暢生成客製化多日深度行程！
+                    本系統已整合 <b>OpenAI GPT-4o</b> + <b>Gemini 大模型</b> + <b>全台 22 縣市離線原生引擎</b>。無論在飛行模式、山區無訊號或高負載下，都能 100% 順暢產出深度走讀行程！
                   </p>
                 </div>
 

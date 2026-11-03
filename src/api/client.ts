@@ -7,6 +7,13 @@
 
 import { generateLocalSmartItinerary, PlannerParams } from "../services/localPlannerEngine";
 import { resolveSpotStory } from "../data/taiwanStories";
+import { 
+  generateGptGuidedStory, 
+  generateGptItineraryPlan, 
+  getOpenAIApiKey, 
+  getSelectedAiEngine,
+  testOpenAIConnection
+} from "../services/gptService";
 
 // Production / Cloud Run service fallback URL
 export const DEFAULT_CLOUD_BACKEND_URL = "https://ais-dev-4c77ogdycvrhx7f7azn4an-369482150771.asia-east1.run.app";
@@ -151,9 +158,23 @@ export const apiClient = {
   },
 
   async generateGuidedStory(params: GuidedStoryRequest): Promise<GuidedStoryResponse> {
-    const baseUrl = getApiBaseUrl();
+    const aiEngine = getSelectedAiEngine();
+    const openAiKey = getOpenAIApiKey();
 
-    // If a cloud backend is available (web preview or custom URL set), try it first with timeout
+    // 1. If GPT engine is chosen (or OpenAI key exists), prioritize live GPT-4o-mini
+    if (aiEngine === "gpt" && openAiKey) {
+      try {
+        const gptRes = await generateGptGuidedStory(params);
+        if (gptRes && gptRes.text) {
+          return gptRes;
+        }
+      } catch (gptErr) {
+        console.warn("Direct OpenAI GPT story generation failed, falling back to server/local:", gptErr);
+      }
+    }
+
+    // 2. If a cloud backend is available (web preview or custom URL set), try it
+    const baseUrl = getApiBaseUrl();
     if (baseUrl || !isNativePlatform()) {
       try {
         const endpoint = `${baseUrl || ""}/api/guided-story`;
@@ -171,6 +192,18 @@ export const apiClient = {
         }
       } catch (e) {
         console.warn("Cloud guided story call timed out or failed, switching to local verified story:", e);
+      }
+    }
+
+    // 3. Fallback to GPT if not yet attempted
+    if (openAiKey) {
+      try {
+        const gptRes = await generateGptGuidedStory(params);
+        if (gptRes && gptRes.text) {
+          return gptRes;
+        }
+      } catch (e) {
+        // Continue to local verified story
       }
     }
 
@@ -220,9 +253,23 @@ export const apiClient = {
   },
 
   async generateItineraryPlan(params: ItineraryPlanRequest): Promise<ItineraryPlanResponse> {
-    const baseUrl = getApiBaseUrl();
+    const aiEngine = getSelectedAiEngine();
+    const openAiKey = getOpenAIApiKey();
 
-    // If a cloud backend is available (web preview or custom URL set), try it first with timeout
+    // 1. If GPT engine is prioritized (or OpenAI key exists), prioritize live GPT-4o-mini
+    if (aiEngine === "gpt" && openAiKey) {
+      try {
+        const gptRes = await generateGptItineraryPlan(params);
+        if (gptRes && gptRes.itinerary && gptRes.itinerary.length > 0) {
+          return gptRes;
+        }
+      } catch (gptErr) {
+        console.warn("Direct OpenAI GPT itinerary plan failed, falling back to server/local:", gptErr);
+      }
+    }
+
+    // 2. If a cloud backend is available (web preview or custom URL set), try it first with timeout
+    const baseUrl = getApiBaseUrl();
     if (baseUrl || !isNativePlatform()) {
       try {
         const endpoint = `${baseUrl || ""}/api/itinerary-plan`;
@@ -240,6 +287,18 @@ export const apiClient = {
         }
       } catch (e) {
         console.warn("Cloud itinerary call timed out or failed, switching to local autonomous planner engine:", e);
+      }
+    }
+
+    // 3. Fallback to GPT if not yet attempted
+    if (openAiKey) {
+      try {
+        const gptRes = await generateGptItineraryPlan(params);
+        if (gptRes && gptRes.itinerary && gptRes.itinerary.length > 0) {
+          return gptRes;
+        }
+      } catch (e) {
+        // Continue to local autonomous engine
       }
     }
 
