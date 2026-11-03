@@ -267,3 +267,55 @@ export async function generateGptItineraryPlan(params: ItineraryPlanRequest): Pr
     notes: notes
   };
 }
+
+// In-memory cache for audio blob URLs to avoid duplicate TTS calls
+const audioBlobCache = new Map<string, string>();
+
+/**
+ * OpenAI Text-to-Speech (TTS) Voice Synthesis
+ * Calls OpenAI /v1/audio/speech with model tts-1
+ * Supported voices: nova (warm female), shimmer, alloy, onyx (deep male), echo, fable
+ * Returns an Audio Object URL that plays in ANY browser or Android WebView/APK!
+ */
+export async function synthesizeGptSpeech(
+  text: string,
+  voice: "nova" | "alloy" | "shimmer" | "onyx" | "echo" | "fable" = "nova",
+  speed = 1.0
+): Promise<string> {
+  const cacheKey = `${voice}_${speed}_${text.slice(0, 120)}_${text.length}`;
+  if (audioBlobCache.has(cacheKey)) {
+    return audioBlobCache.get(cacheKey)!;
+  }
+
+  const apiKey = getOpenAIApiKey();
+  if (!apiKey) {
+    throw new Error("NO_OPENAI_KEY");
+  }
+
+  const cleanText = text.slice(0, 4000);
+
+  const res = await fetch("https://api.openai.com/v1/audio/speech", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${apiKey}`
+    },
+    body: JSON.stringify({
+      model: "tts-1",
+      input: cleanText,
+      voice: voice,
+      speed: Math.max(0.5, Math.min(2.0, speed)),
+      response_format: "mp3"
+    })
+  });
+
+  if (!res.ok) {
+    const errJson = await res.json().catch(() => ({}));
+    throw new Error(errJson?.error?.message || `GPT 語音請求失敗 (HTTP ${res.status})`);
+  }
+
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  audioBlobCache.set(cacheKey, url);
+  return url;
+}

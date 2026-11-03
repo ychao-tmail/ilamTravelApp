@@ -372,6 +372,49 @@ app.post("/api/guided-story", async (req, res) => {
   }
 });
 
+// ENDPOINT: OpenAI TTS Text-to-Speech Audio Synthesis (Works in all Android WebViews & Browsers)
+app.post("/api/tts", async (req, res) => {
+  try {
+    const { text, voice = "nova", speed = 1.0, apiKey } = req.body || {};
+    const activeKey = apiKey?.trim() || OPENAI_API_KEY;
+    if (!activeKey) {
+      return res.status(400).json({ error: "NO_OPENAI_KEY" });
+    }
+
+    if (!text || !text.trim()) {
+      return res.status(400).json({ error: "Missing text for TTS" });
+    }
+
+    const ttsRes = await fetch("https://api.openai.com/v1/audio/speech", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${activeKey}`
+      },
+      body: JSON.stringify({
+        model: "tts-1",
+        input: text.slice(0, 4000),
+        voice: voice,
+        speed: Math.max(0.5, Math.min(2.0, Number(speed) || 1.0)),
+        response_format: "mp3"
+      })
+    });
+
+    if (!ttsRes.ok) {
+      const err = await ttsRes.json().catch(() => ({}));
+      return res.status(ttsRes.status).json({ error: err?.error?.message || "OpenAI TTS error" });
+    }
+
+    const arrayBuffer = await ttsRes.arrayBuffer();
+    res.setHeader("Content-Type", "audio/mpeg");
+    res.setHeader("Cache-Control", "public, max-age=86400");
+    return res.send(Buffer.from(arrayBuffer));
+  } catch (err: any) {
+    console.error("Error in /api/tts:", err);
+    return res.status(500).json({ error: err?.message || "TTS internal error" });
+  }
+});
+
 // ENDPOINT 2: ITINERARY PLANNER
 app.post("/api/itinerary-plan", async (req, res) => {
   try {
