@@ -1258,8 +1258,21 @@ export default function ExploreTab({
             {/* Modal Scrollable Body */}
             <div className="p-5 space-y-5 overflow-y-auto flex-1 bg-[#FAF8F5]">
               {/* TAB 1: AUTHENTIC DEEP ARTICLE */}
-              {activeTabMode === "article" && (
+               {activeTabMode === "article" && (
                 <div className="space-y-4">
+                  {/* Section 1: 文史身世與時代背景 (Placed directly at the very top) */}
+                  <div className="bg-white p-4.5 rounded-2xl border border-gray-100 shadow-xs space-y-2">
+                    <div className="flex items-center gap-2 border-b border-gray-100 pb-2">
+                      <span className="text-base">🏛️</span>
+                      <h4 className="font-bold text-sm text-gray-900 font-display">
+                        風土身世與歷史脈絡
+                      </h4>
+                    </div>
+                    <div className="text-xs text-gray-700 leading-relaxed whitespace-pre-wrap font-sans space-y-2">
+                      {currentArticle.historyContext}
+                    </div>
+                  </div>
+
                   {/* Article Title Banner */}
                   <div className="bg-white p-4.5 rounded-2xl border border-amber-200/60 shadow-xs space-y-2">
                     <span className="text-[10px] bg-amber-100 text-amber-900 font-bold px-2 py-0.5 rounded-full uppercase tracking-wider inline-block">
@@ -1304,19 +1317,6 @@ export default function ExploreTab({
                         <Sparkles className="w-3.5 h-3.5 text-white" />
                         <span>一鍵產生說書詞</span>
                       </button>
-                    </div>
-                  </div>
-
-                  {/* Section 1: 文史身世與時代背景 */}
-                  <div className="bg-white p-4.5 rounded-2xl border border-gray-100 shadow-xs space-y-2">
-                    <div className="flex items-center gap-2 border-b border-gray-100 pb-2">
-                      <span className="text-base">🏛️</span>
-                      <h4 className="font-bold text-sm text-gray-900 font-display">
-                        風土身世與歷史脈絡
-                      </h4>
-                    </div>
-                    <div className="text-xs text-gray-700 leading-relaxed whitespace-pre-wrap font-sans space-y-2">
-                      {currentArticle.historyContext}
                     </div>
                   </div>
 
