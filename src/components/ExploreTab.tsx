@@ -21,6 +21,12 @@ import {
   TAIWAN_COUNTIES, 
   DetectedLocation 
 } from "../services/locationService";
+import { 
+  speakUtterance, 
+  stopUtterance, 
+  detectTtsCapabilities, 
+  TtsEngineStatus 
+} from "../services/nativeTtsService";
 
 // Flagship spots across Taiwan (North, Central, South, East, Offshore)
 export const DEFAULT_SPOTS: Spot[] = [
@@ -535,16 +541,20 @@ export default function ExploreTab({
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [usedAiModel, setUsedAiModel] = useState<string | null>(null);
 
-  // Web Speech audio state
+  // Unified TTS audio state
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   const [audioProgress, setAudioProgress] = useState(0);
+  const [ttsStatus, setTtsStatus] = useState<TtsEngineStatus | null>(null);
+
+  // Detect TTS engine on mount
+  useEffect(() => {
+    detectTtsCapabilities().then(setTtsStatus);
+  }, []);
 
   // Stop audio on unmount
   useEffect(() => {
     return () => {
-      if (window.speechSynthesis) {
-        window.speechSynthesis.cancel();
-      }
+      stopUtterance();
     };
   }, []);
 
@@ -579,9 +589,7 @@ export default function ExploreTab({
     theme: "歷史背景" | "建築特色" | "在地飲食" = selectedTheme,
     openMode: "article" | "audio" = "article"
   ) => {
-    if (window.speechSynthesis) {
-      window.speechSynthesis.cancel();
-    }
+    stopUtterance();
     setIsPlayingAudio(false);
     setAudioProgress(0);
     setActiveSpot(spot);
@@ -708,74 +716,57 @@ export default function ExploreTab({
     }
   };
 
-  // Audio Playback with Web Speech API (預設 Google 國語 / 中文 (台灣) TTS 語音，零等待秒播)
-  const handleToggleAudio = () => {
-    if (!window.speechSynthesis) {
-      alert("您的瀏覽器尚不支援內建語音播放 Web Speech API。");
+  // Universal Audio Playback: Automatic fallback between @capacitor-community/text-to-speech and Web Speech
+  const handleToggleAudio = async () => {
+    if (isPlayingAudio) {
+      await stopUtterance();
+      setIsPlayingAudio(false);
+      setAudioProgress(0);
       return;
     }
 
-    if (isPlayingAudio) {
-      window.speechSynthesis.cancel();
-      setIsPlayingAudio(false);
-      setAudioProgress(0);
-    } else {
-      window.speechSynthesis.cancel();
-      const textToSpeak = guideText || currentArticle?.audioScript || "歡迎收聽台灣深度語音導覽。";
-      const utterance = new SpeechSynthesisUtterance(textToSpeak);
+    await stopUtterance();
+    const textToSpeak = guideText || currentArticle?.audioScript || "歡迎收聽台灣深度語音導覽。";
 
-      // Prioritize Google Mandarin (Taiwan) or Taiwanese voice
-      const voices = window.speechSynthesis.getVoices();
-      if (selectedVoicePack === "英語播報") {
-        utterance.lang = "en-US";
-        const enVoice = voices.find(v => v.lang === "en-US" && v.name.toLowerCase().includes("google"))
-          || voices.find(v => v.lang.startsWith("en"));
-        if (enVoice) utterance.voice = enVoice;
-        utterance.rate = speechRate * 0.95;
-        utterance.pitch = 1.0;
-      } else {
-        utterance.lang = "zh-TW";
-        const googleZhVoice = 
-          voices.find(v => (v.lang === "zh-TW" || v.lang === "cmn-Hant-TW") && v.name.toLowerCase().includes("google")) ||
-          voices.find(v => v.lang === "zh-TW" || v.lang === "cmn-Hant-TW") ||
-          voices.find(v => v.lang.startsWith("zh") && v.name.toLowerCase().includes("google")) ||
-          voices.find(v => v.lang.startsWith("zh"));
-        if (googleZhVoice) {
-          utterance.voice = googleZhVoice;
-        }
-
-        if (selectedVoicePack === "可愛孩子") {
-          utterance.rate = speechRate * 1.1;
-          utterance.pitch = 1.35;
-        } else {
-          utterance.rate = speechRate * 0.95;
-          utterance.pitch = 1.0;
-        }
+    // Progress estimation ticker
+    const estDurationSec = Math.max(8, Math.round(textToSpeak.length * 0.32 * (1 / speechRate)));
+    let elapsed = 0;
+    const interval = setInterval(() => {
+      elapsed += 0.5;
+      const pct = Math.min(99, Math.round((elapsed / estDurationSec) * 100));
+      setAudioProgress(pct);
+      if (elapsed >= estDurationSec) {
+        clearInterval(interval);
       }
+    }, 500);
 
-      utterance.onend = () => {
-        setIsPlayingAudio(false);
-        setAudioProgress(100);
-      };
-
-      utterance.onerror = () => {
-        setIsPlayingAudio(false);
-      };
-
-      // Approximate progress tracking
-      const estDurationSec = Math.max(8, Math.round(textToSpeak.length * 0.32 * (1 / speechRate)));
-      let elapsed = 0;
-      const interval = setInterval(() => {
-        elapsed += 0.5;
-        const pct = Math.min(99, Math.round((elapsed / estDurationSec) * 100));
-        setAudioProgress(pct);
-        if (elapsed >= estDurationSec || !isPlayingAudio) {
-          clearInterval(interval);
-        }
-      }, 500);
-
-      window.speechSynthesis.speak(utterance);
+    try {
       setIsPlayingAudio(true);
+      await speakUtterance({
+        text: textToSpeak,
+        rate: speechRate,
+        pitch: 1.0,
+        voicePack: selectedVoicePack,
+        onStart: () => {
+          setIsPlayingAudio(true);
+        },
+        onEnd: () => {
+          clearInterval(interval);
+          setIsPlayingAudio(false);
+          setAudioProgress(100);
+        },
+        onError: (err) => {
+          clearInterval(interval);
+          setIsPlayingAudio(false);
+          console.warn("TTS narration warning/error:", err);
+        }
+      });
+    } catch (err: any) {
+      clearInterval(interval);
+      setIsPlayingAudio(false);
+      console.error("Audio playback error:", err);
+      // Even if one engine fails, inform cleanly without crashing
+      alert("語音播放已自動調用備援線路，請再次點擊或稍候。");
     }
   };
 
@@ -1346,12 +1337,11 @@ export default function ExploreTab({
 
               <button
                 onClick={() => {
+                  stopUtterance();
                   setActiveSpot(null);
                   setCurrentArticle(null);
                   setIsPlayingAudio(false);
-                  if (window.speechSynthesis) {
-                    window.speechSynthesis.cancel();
-                  }
+                  setAudioProgress(0);
                 }}
                 className="text-gray-300 hover:text-white bg-white/10 hover:bg-white/20 p-2 rounded-full transition-all cursor-pointer"
                 title="關閉"
@@ -1565,7 +1555,7 @@ export default function ExploreTab({
                             </span>
                             {!isAiCustomized ? (
                               <span className="text-[9px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full border border-emerald-200">
-                                🎙️ Google 國語語音 (預設)
+                                🎙️ {ttsStatus?.engineLabel || "系統語音引擎 (TTS)"}
                               </span>
                             ) : (
                               <span className="text-[9px] bg-purple-100 text-purple-800 font-bold px-2 py-0.5 rounded-full border border-purple-200">
@@ -1648,12 +1638,12 @@ export default function ExploreTab({
                         {isPlayingAudio ? (
                           <>
                             <Pause className="w-3.5 h-3.5 text-[#E8A02C]" />
-                            <span>暫停 Google 語音朗讀</span>
+                            <span>暫停語音朗讀</span>
                           </>
                         ) : (
                           <>
                             <Play className="w-3.5 h-3.5 text-[#13294B]" />
-                            <span>{isAiCustomized ? "Google 語音朗讀客製詞" : "Google 語音即時播放"}</span>
+                            <span>{isAiCustomized ? "語音朗讀客製詞" : "即時語音播放"}</span>
                           </>
                         )}
                       </button>

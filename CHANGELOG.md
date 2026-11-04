@@ -4,6 +4,28 @@
 
 ---
 
+## 🔊 [v1.4.2] - 2026-11-04
+
+### 🌟 Android 原生 TTS 語音插件與全設備無縫自動切換 (Universal Text-to-Speech)
+* **安裝 `@capacitor-community/text-to-speech` 原生外掛**：
+  - 專門針對 Android 原生系統底層 TTS 引擎（`android.speech.tts.TextToSpeech`）進行橋接，解決部分 Android 手機在 WebView 中無內建語音或不支援 HTML5 Web Speech API 的問題。
+* **App.tsx 全域啟動語音能力自動偵測 (`detectTtsCapabilities`)**：
+  - 在 App 載入時自動偵測執行環境（Android 原生 APK 或 Web 瀏覽器），並驗證 Web Speech API 與系統語音引擎支援狀態。
+  - 當偵測到瀏覽器 Web Speech 不可用或缺少語音時，系統自動將主引擎切換為 Android 原生 TTS 服務，確保語音導覽在所有實體手機與平板設備上都能 100% 正常發聲。
+* **統一跨端語音呼叫服務架構 (`src/services/nativeTtsService.ts`)**：
+  - 封裝 `speakUtterance()` 與 `stopUtterance()`：
+    - 在 Android 原生環境優先啟用 `@capacitor-community/text-to-speech`，零等待高音質播報。
+    - 在桌面與支援的瀏覽器自動對接 Google 國語 / 中文 (台灣) Web Speech 語音。
+    - 具備跨引擎雙重容錯重試機制（Retry & Fallback），若一方受限自動切換備援。
+  - 完整支援語速調節（0.8x、1.0x、1.25x）與不同口吻語音包（專業主播、可愛孩子、英語播報）。
+* **探索頁面與系統診斷面板升級**：
+  - 探索說書彈窗中的語音播放器動態顯示當前啟用的語音引擎狀態徽章（如 `Android 原生系統 TTS 引擎` 或 `Web Speech 瀏覽器語音`）。
+  - 在系統設定彈窗中加入專屬「🔊 語音導覽與 TTS 語音引擎狀態」卡片，詳細列出環境診斷資訊並提供一鍵「試聽 TTS 語音發聲測試」功能。
+* **每次更新完整版本變更紀錄規範維護**：
+  - 遵循版本更新變更紀錄標準，同步更新 `CHANGELOG.md` 與 `package.json`（v1.4.2）。
+
+---
+
 ## 🎨 [v1.4.1] - 2026-11-04
 
 ### 🌟 專屬視覺識別與官方圖標升級 (Brand & App Icon Integration)

@@ -35,7 +35,7 @@ export function getApiBaseUrl(): string {
   }
 
   // 2. Environment variable injected at build/runtime
-  const envUrl = import.meta.env.VITE_API_BASE_URL;
+  const envUrl = (import.meta as any).env?.VITE_API_BASE_URL;
   if (envUrl && typeof envUrl === "string" && envUrl.trim()) {
     return envUrl.trim().replace(/\/+$/, "");
   }

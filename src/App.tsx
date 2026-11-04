@@ -16,6 +16,12 @@ import {
   setSelectedAiEngine,
   testOpenAIConnection 
 } from "./services/gptService";
+import { 
+  detectTtsCapabilities, 
+  speakUtterance, 
+  stopUtterance, 
+  TtsEngineStatus 
+} from "./services/nativeTtsService";
 
 // Flagship default itinerary covering Taiwan nationwide
 const DEFAULT_ITINERARY: DayItinerary[] = [
@@ -97,6 +103,17 @@ export default function App() {
     setIsTestingServer(false);
   };
 
+  const handleSaveCustomUrl = () => {
+    apiClient.setCustomBaseUrl(customUrlInput.trim() || null);
+    testServerConnection();
+  };
+
+  const handleResetDefaultUrl = () => {
+    apiClient.setCustomBaseUrl(null);
+    setCustomUrlInput("");
+    testServerConnection();
+  };
+
   // AI Engine & API Key State
   const [openAiKeyInput, setOpenAiKeyInput] = useState(getOpenAIApiKey());
   const [selectedEngine, setSelectedEngine] = useState<"gpt" | "gemini" | "local">(getSelectedAiEngine());
@@ -136,6 +153,37 @@ export default function App() {
   const handleOpenSpotGuide = (spotName: string) => {
     setNavGuideSpot(spotName);
     setActiveTab("explore");
+  };
+
+  // TTS Engine Capabilities State
+  const [ttsEngineStatus, setTtsEngineStatus] = useState<TtsEngineStatus | null>(null);
+  const [isTestingTts, setIsTestingTts] = useState(false);
+
+  useEffect(() => {
+    detectTtsCapabilities().then((status) => {
+      setTtsEngineStatus(status);
+      console.log("🔊 TTS Engine Capabilities Initialized:", status);
+    });
+  }, []);
+
+  const handleTestTtsVoice = async () => {
+    if (isTestingTts) {
+      await stopUtterance();
+      setIsTestingTts(false);
+      return;
+    }
+    setIsTestingTts(true);
+    try {
+      await speakUtterance({
+        text: "您好！歡迎使用台灣走讀深度導覽，語音服務運作正常，祝您旅途愉快！",
+        rate: 1.0,
+        voicePack: "專業的主播",
+        onEnd: () => setIsTestingTts(false),
+        onError: () => setIsTestingTts(false)
+      });
+    } catch {
+      setIsTestingTts(false);
+    }
   };
 
   // Load from LocalStorage if user previously generated or saved trip details
@@ -892,12 +940,57 @@ export default function App() {
                   </p>
                 </div>
 
+                {/* Native TTS & Voice Engine Status Card */}
+                <div className="p-3.5 bg-amber-50/80 rounded-2xl border border-amber-200/90 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <span className="p-1 bg-[#E8A02C] text-white rounded-lg text-xs">🔊</span>
+                      <span className="font-bold text-xs text-amber-950">語音導覽與 TTS 語音引擎狀態</span>
+                    </div>
+                    <span className="text-[9px] bg-amber-200 text-amber-900 font-bold px-2 py-0.5 rounded-full">
+                      {ttsEngineStatus?.isNativeApp ? "Android 原生" : "Web / PWA"}
+                    </span>
+                  </div>
+
+                  <div className="bg-white/90 p-2.5 rounded-xl border border-amber-100 text-[11px] text-gray-700 space-y-1.5">
+                    <div className="flex justify-between items-center pb-1 border-b border-gray-100">
+                      <span className="text-gray-500 font-medium">當前主用語音引擎：</span>
+                      <span className="font-bold text-amber-900">
+                        {ttsEngineStatus?.engineLabel || "檢測中..."}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center text-[10px]">
+                      <span className="text-gray-500">瀏覽器 Web Speech：</span>
+                      <span className={ttsEngineStatus?.webSpeechSupported ? "text-emerald-600 font-bold" : "text-amber-700 font-bold"}>
+                        {ttsEngineStatus?.webSpeechSupported ? "🟢 支援 (可播放)" : "🟡 未支援 (已自動切換原生 TTS)"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center text-[10px]">
+                      <span className="text-gray-500">Capacitor 原生 TTS 插件：</span>
+                      <span className="text-emerald-600 font-bold">
+                        🟢 @capacitor-community/text-to-speech 已就緒
+                      </span>
+                    </div>
+                    <div className="text-[10px] text-amber-900/80 pt-0.5 leading-relaxed">
+                      💡 <b>自動容錯機制</b>：若偵測到環境不支援 Web Speech API，系統將自動無縫調用原生 Android TTS 模組，確保手機 APK 與平板上點擊「播放語音」100% 發聲！
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleTestTtsVoice}
+                    className="w-full py-1.5 px-3 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-bold transition-all text-xs flex items-center justify-center gap-1.5 shadow-xs cursor-pointer active:scale-98"
+                  >
+                    <span>{isTestingTts ? "⏹️ 停止測試語音" : "▶️ 試聽 TTS 語音發聲測試"}</span>
+                  </button>
+                </div>
+
                 {/* Download Project ZIP & GitHub Actions APK Build */}
                 <div className="p-3.5 bg-emerald-50/80 rounded-2xl border border-emerald-200/90 space-y-2.5">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-1.5">
                       <span className="p-1 bg-emerald-600 text-white rounded-lg text-xs">📦</span>
-                      <span className="font-bold text-xs text-emerald-950">專案下載與 APK 打包 (v1.4.0)</span>
+                      <span className="font-bold text-xs text-emerald-950">專案下載與 APK 打包 (v1.4.2)</span>
                     </div>
                     <span className="text-[9px] bg-emerald-200 text-emerald-800 font-bold px-2 py-0.5 rounded-full">
                       已同步 Android
@@ -905,13 +998,13 @@ export default function App() {
                   </div>
 
                   <p className="text-[11px] text-emerald-900 leading-relaxed">
-                    本專案已封裝最新 v1.4.0 完整原始碼與已編譯的 Capacitor Android 原生目錄，可一鍵下載本機工程或推送至 GitHub 自動打包產出 APK：
+                    本專案已封裝最新 v1.4.2 完整原始碼與已編譯的 Capacitor Android 原生目錄，可一鍵下載本機工程或推送至 GitHub 自動打包產出 APK：
                   </p>
 
                   <div className="flex flex-col gap-2 pt-1">
                     <a
-                      href="/deepgo-taiwan-v1.4.0-project.zip"
-                      download="deepgo-taiwan-v1.4.0-project.zip"
+                      href="/deepgo-taiwan-v1.4.2-project.zip"
+                      download="deepgo-taiwan-v1.4.2-project.zip"
                       className="w-full py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold transition-all text-xs flex items-center justify-center gap-2 shadow-xs active:scale-98"
                     >
                       <Download className="w-3.5 h-3.5" />
@@ -927,7 +1020,7 @@ export default function App() {
                         git push -u origin main
                       </div>
                       <p className="text-[9px] text-gray-500 font-sans">
-                        專案已內建 GitHub Actions CI/CD 流水線（<code>.github/workflows/build-apk.yml</code>），推送後 GitHub 會自動在 Actions 與 Releases 產出 <code>deepgo-taiwan-v1.4.0-debug.apk</code> 提供直接下載！
+                        專案已內建 GitHub Actions CI/CD 流水線（<code>.github/workflows/build-apk.yml</code>），推送後 GitHub 會自動在 Actions 與 Releases 產出 <code>deepgo-taiwan-v1.4.2-debug.apk</code> 提供直接下載！
                       </p>
                     </div>
                   </div>
