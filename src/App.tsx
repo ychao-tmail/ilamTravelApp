@@ -990,7 +990,7 @@ export default function App() {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-1.5">
                       <span className="p-1 bg-emerald-600 text-white rounded-lg text-xs">📦</span>
-                      <span className="font-bold text-xs text-emerald-950">專案下載與 APK 打包 (v1.4.2)</span>
+                      <span className="font-bold text-xs text-emerald-950">專案下載與 APK 打包 (v1.4.3)</span>
                     </div>
                     <span className="text-[9px] bg-emerald-200 text-emerald-800 font-bold px-2 py-0.5 rounded-full">
                       已同步 Android
@@ -998,13 +998,13 @@ export default function App() {
                   </div>
 
                   <p className="text-[11px] text-emerald-900 leading-relaxed">
-                    本專案已封裝最新 v1.4.2 完整原始碼與已編譯的 Capacitor Android 原生目錄，可一鍵下載本機工程或推送至 GitHub 自動打包產出 APK：
+                    本專案已封裝最新 v1.4.3 完整原始碼與已編譯的 Capacitor Android 原生目錄，可一鍵下載本機工程或推送至 GitHub 自動打包產出 APK：
                   </p>
 
                   <div className="flex flex-col gap-2 pt-1">
                     <a
-                      href="/deepgo-taiwan-v1.4.2-project.zip"
-                      download="deepgo-taiwan-v1.4.2-project.zip"
+                      href="/deepgo-taiwan-v1.4.3-project.zip"
+                      download="deepgo-taiwan-v1.4.3-project.zip"
                       className="w-full py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold transition-all text-xs flex items-center justify-center gap-2 shadow-xs active:scale-98"
                     >
                       <Download className="w-3.5 h-3.5" />
@@ -1020,7 +1020,7 @@ export default function App() {
                         git push -u origin main
                       </div>
                       <p className="text-[9px] text-gray-500 font-sans">
-                        專案已內建 GitHub Actions CI/CD 流水線（<code>.github/workflows/build-apk.yml</code>），推送後 GitHub 會自動在 Actions 與 Releases 產出 <code>deepgo-taiwan-v1.4.2-debug.apk</code> 提供直接下載！
+                        專案已內建 GitHub Actions CI/CD 流水線（<code>.github/workflows/build-apk.yml</code>），推送後 GitHub 會自動在 Actions 與 Releases 產出 <code>deepgo-taiwan-v1.4.3-debug.apk</code> 提供直接下載！
                       </p>
                     </div>
                   </div>

@@ -1,6 +1,8 @@
-import { useState, CSSProperties } from "react";
-import { CheckSquare, Square, Calendar, Plus, Compass, Trash2, ArrowRight, CornerDownRight, Sparkles, Map, X, ChevronLeft, ChevronRight, Navigation, BookOpen } from "lucide-react";
-import { DayItinerary, SavedItinerary } from "../types";
+import { useState, CSSProperties, useEffect } from "react";
+import { CheckSquare, Square, Calendar, Plus, Compass, Trash2, ArrowRight, CornerDownRight, Sparkles, Map, X, ChevronLeft, ChevronRight, Navigation, BookOpen, Volume2, VolumeX, Play, Pause, ExternalLink, CheckCircle2 } from "lucide-react";
+import { DayItinerary, SavedItinerary, MealRecommend } from "../types";
+import { parseFoodRecommendIntoMealCards } from "../data/foodStories";
+import { speakUtterance, stopUtterance } from "../services/nativeTtsService";
 
 const getSpotCoords = (spotName: string): { x: number; y: number; region: string; bg: string } => {
   const name = spotName || "";
@@ -137,6 +139,77 @@ export default function MyItineraryTab({
       coords: getSpotCoords(act.title)
     }))
   );
+
+  // Food Story Article & Audio State
+  const [activeFoodArticle, setActiveFoodArticle] = useState<MealRecommend | null>(null);
+  const [isPlayingFoodAudio, setIsPlayingFoodAudio] = useState(false);
+  const [foodAudioProgress, setFoodAudioProgress] = useState(0);
+
+  // Stop audio on unmount
+  useEffect(() => {
+    return () => {
+      stopUtterance();
+    };
+  }, []);
+
+  const handleOpenFoodArticle = (meal: MealRecommend) => {
+    stopUtterance();
+    setIsPlayingFoodAudio(false);
+    setFoodAudioProgress(0);
+    setActiveFoodArticle(meal);
+  };
+
+  const handleCloseFoodArticle = () => {
+    stopUtterance();
+    setIsPlayingFoodAudio(false);
+    setFoodAudioProgress(0);
+    setActiveFoodArticle(null);
+  };
+
+  const handleToggleFoodAudio = async () => {
+    if (!activeFoodArticle) return;
+    if (isPlayingFoodAudio) {
+      await stopUtterance();
+      setIsPlayingFoodAudio(false);
+      setFoodAudioProgress(0);
+      return;
+    }
+
+    await stopUtterance();
+    const textToSpeak = activeFoodArticle.audioScript || activeFoodArticle.article || `${activeFoodArticle.name}，招牌推薦為${activeFoodArticle.dish}。${activeFoodArticle.highlight}`;
+    const estDurationSec = Math.max(8, Math.round(textToSpeak.length * 0.32));
+    let elapsed = 0;
+    const interval = setInterval(() => {
+      elapsed += 0.5;
+      const pct = Math.min(99, Math.round((elapsed / estDurationSec) * 100));
+      setFoodAudioProgress(pct);
+      if (elapsed >= estDurationSec) {
+        clearInterval(interval);
+      }
+    }, 500);
+
+    try {
+      setIsPlayingFoodAudio(true);
+      await speakUtterance({
+        text: textToSpeak,
+        rate: 1.0,
+        voicePack: "專業的主播",
+        onStart: () => setIsPlayingFoodAudio(true),
+        onEnd: () => {
+          clearInterval(interval);
+          setIsPlayingFoodAudio(false);
+          setFoodAudioProgress(100);
+        },
+        onError: () => {
+          clearInterval(interval);
+          setIsPlayingFoodAudio(false);
+        }
+      });
+    } catch {
+      clearInterval(interval);
+      setIsPlayingFoodAudio(false);
+    }
+  };
 
   const openGoogleMaps = (targetName: string, locationHint?: string) => {
     const query = [targetName, locationHint].filter(Boolean).join(" ");
@@ -361,110 +434,126 @@ export default function MyItineraryTab({
                   </div>
                 )}
 
-                {/* Structured Lunch Recommendation Card */}
-                {day.lunch && (
-                  <div className="bg-gradient-to-br from-amber-50/90 via-orange-50/40 to-amber-50/70 border border-amber-200/80 rounded-2xl p-3.5 shadow-xs space-y-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <span className="px-2 py-0.5 rounded-md bg-amber-500 text-white text-[10px] font-black font-mono shadow-2xs">
-                          🥢 在地午餐推薦
+                {/* 🥢 美食導航一家一張獨立小卡 (精確導航與深度介紹專文) */}
+                {(() => {
+                  const mealCards = parseFoodRecommendIntoMealCards(day, day.areaFocus);
+                  if (mealCards.length === 0) return null;
+                  return (
+                    <div className="space-y-2.5 pt-1">
+                      <div className="flex items-center justify-between px-1">
+                        <span className="text-[11px] font-bold text-amber-900 flex items-center gap-1.5 font-display">
+                          <span>🥢</span> 今日特色美食推薦 ({mealCards.length} 間名店)
                         </span>
-                        <span className="text-[10px] font-bold text-amber-900 font-mono">
-                          💰 {day.lunch.cost}
-                        </span>
-                      </div>
-                      <button
-                        onClick={() => openGoogleMaps(day.lunch!.name, day.lunch!.location)}
-                        className="bg-amber-600 hover:bg-amber-700 text-white text-[11px] font-bold px-3 py-1 rounded-xl flex items-center gap-1 transition-all shadow-xs cursor-pointer active:scale-95 flex-shrink-0"
-                        title="開啟 Google 導航直達此午餐店家"
-                      >
-                        <Navigation className="w-3.5 h-3.5 fill-current" />
-                        <span>Google 導航</span>
-                      </button>
-                    </div>
-
-                    <div className="space-y-1">
-                      <h5 className="font-bold text-sm text-gray-900 font-display">
-                        {day.lunch.name}
-                      </h5>
-                      <p className="text-xs font-semibold text-amber-900">
-                        🔥 招牌必吃：{day.lunch.dish}
-                      </p>
-                      <p className="text-xs text-gray-600 leading-relaxed">
-                        {day.lunch.highlight}
-                      </p>
-                      {day.lunch.location && (
-                        <p className="text-[10px] text-gray-500 flex items-center gap-1 pt-0.5">
-                          <span>📍</span>
-                          <span className="truncate">{day.lunch.location}</span>
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Structured Dinner / Night Market Recommendation Card */}
-                {day.dinner && (
-                  <div className="bg-gradient-to-br from-indigo-50/80 via-purple-50/30 to-rose-50/50 border border-indigo-200/70 rounded-2xl p-3.5 shadow-xs space-y-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <span className="px-2 py-0.5 rounded-md bg-[#13294B] text-white text-[10px] font-black font-mono shadow-2xs">
-                          🏮 晚餐 / 夜市推薦
-                        </span>
-                        <span className="text-[10px] font-bold text-indigo-900 font-mono">
-                          💰 {day.dinner.cost}
+                        <span className="text-[9px] text-amber-800 bg-amber-100/80 border border-amber-200/80 px-2 py-0.5 rounded-full font-bold">
+                          一家一卡 • 精準導航
                         </span>
                       </div>
-                      <button
-                        onClick={() => openGoogleMaps(day.dinner!.name, day.dinner!.location)}
-                        className="bg-[#13294B] hover:bg-[#1E3E62] text-white text-[11px] font-bold px-3 py-1 rounded-xl flex items-center gap-1 transition-all shadow-xs cursor-pointer active:scale-95 flex-shrink-0"
-                        title="開啟 Google 導航直達此晚餐或夜市"
-                      >
-                        <Navigation className="w-3.5 h-3.5 fill-current" />
-                        <span>Google 導航</span>
-                      </button>
-                    </div>
 
-                    <div className="space-y-1">
-                      <h5 className="font-bold text-sm text-gray-900 font-display">
-                        {day.dinner.name}
-                      </h5>
-                      <p className="text-xs font-semibold text-indigo-950">
-                        🔥 排隊亮點：{day.dinner.dish}
-                      </p>
-                      <p className="text-xs text-gray-600 leading-relaxed">
-                        {day.dinner.highlight}
-                      </p>
-                      {day.dinner.location && (
-                        <p className="text-[10px] text-gray-500 flex items-center gap-1 pt-0.5">
-                          <span>📍</span>
-                          <span className="truncate">{day.dinner.location}</span>
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                )}
+                      <div className="grid grid-cols-1 gap-2.5">
+                        {mealCards.map((meal, mIdx) => (
+                          <div
+                            key={mIdx}
+                            className={`border rounded-2xl p-4 shadow-xs transition-all ${
+                              meal.type === "lunch"
+                                ? "bg-gradient-to-br from-amber-50/90 via-orange-50/40 to-white border-amber-200/90"
+                                : meal.type === "dinner"
+                                ? "bg-gradient-to-br from-indigo-50/80 via-purple-50/30 to-white border-indigo-200/80"
+                                : meal.type === "dessert"
+                                ? "bg-gradient-to-br from-rose-50/80 via-pink-50/30 to-white border-rose-200/80"
+                                : "bg-gradient-to-br from-amber-50/70 via-stone-50/30 to-white border-amber-200/70"
+                            }`}
+                          >
+                            {/* Card Header: Category Badge, Price & Google Navigation Button */}
+                            <div className="flex items-center justify-between gap-2 pb-1.5">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span
+                                  className={`px-2 py-0.5 rounded-md text-[10px] font-black font-mono shadow-2xs ${
+                                    meal.type === "lunch"
+                                      ? "bg-amber-600 text-white"
+                                      : meal.type === "dinner"
+                                      ? "bg-[#13294B] text-white"
+                                      : meal.type === "dessert"
+                                      ? "bg-rose-600 text-white"
+                                      : "bg-stone-700 text-white"
+                                  }`}
+                                >
+                                  {meal.categoryLabel || (meal.type === "lunch" ? "🥢 午餐推薦" : meal.type === "dinner" ? "🏮 晚餐夜市" : "🥢 在地美饌")}
+                                </span>
+                                <span className="text-[10px] font-bold text-gray-700 font-mono bg-white/90 border border-gray-200/70 px-2 py-0.5 rounded-md">
+                                  💰 {meal.cost || "平價在地"}
+                                </span>
+                              </div>
 
-                {/* Fallback legacy food recommendation if structured meals not present */}
-                {!day.lunch && !day.dinner && day.foodRecommend && (
-                  <div className="bg-amber-50/70 border border-amber-100 rounded-2xl p-3.5 shadow-xs flex items-center justify-between gap-3">
-                    <div className="flex items-start gap-2.5 min-w-0">
-                      <span className="text-xl flex-shrink-0">🍽️</span>
-                      <div className="space-y-0.5 min-w-0">
-                        <span className="text-[9px] font-black text-amber-700 uppercase tracking-widest block font-mono">今日特色美食推薦</span>
-                        <p className="text-xs text-amber-950 font-bold leading-relaxed line-clamp-2">{day.foodRecommend}</p>
+                              {/* Google Navigation Button */}
+                              <button
+                                type="button"
+                                onClick={() => openGoogleMaps(meal.name, meal.location)}
+                                className={`text-white text-[11px] font-bold px-3 py-1.5 rounded-xl flex items-center gap-1.5 transition-all shadow-xs cursor-pointer active:scale-95 flex-shrink-0 ${
+                                  meal.type === "dinner"
+                                    ? "bg-[#13294B] hover:bg-[#1E3E62]"
+                                    : "bg-amber-600 hover:bg-amber-700"
+                                }`}
+                                title={`開啟 Google 導航直達【${meal.name}】`}
+                              >
+                                <Navigation className="w-3.5 h-3.5 fill-current" />
+                                <span>Google 導航</span>
+                              </button>
+                            </div>
+
+                            {/* Card Content: Store Name, Signature Dish, Address & Story Link */}
+                            <div className="space-y-1.5 pt-1">
+                              <h5 className="font-bold text-sm text-gray-900 font-display flex items-center gap-1.5">
+                                <span>{meal.type === "dessert" ? "🍧" : meal.type === "dinner" ? "🏮" : "🥢"}</span>
+                                <span>{meal.name}</span>
+                              </h5>
+
+                              {meal.dish && (
+                                <p className="text-xs font-semibold text-amber-950 flex items-start gap-1">
+                                  <span className="flex-shrink-0">🔥</span>
+                                  <span>招牌必吃：{meal.dish}</span>
+                                </p>
+                              )}
+
+                              {meal.highlight && (
+                                <p className="text-xs text-gray-600 leading-relaxed line-clamp-2">
+                                  {meal.highlight}
+                                </p>
+                              )}
+
+                              {meal.location && (
+                                <p className="text-[10px] text-gray-500 flex items-center gap-1 pt-0.5">
+                                  <span className="flex-shrink-0">📍</span>
+                                  <span className="truncate">{meal.location}</span>
+                                </p>
+                              )}
+
+                              {/* Article Button & Secondary Action */}
+                              <div className="pt-2 flex items-center justify-between border-t border-gray-100/90 mt-2">
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenFoodArticle(meal)}
+                                  className="text-xs font-bold text-purple-700 hover:text-purple-900 bg-purple-50 hover:bg-purple-100 border border-purple-200/80 px-3 py-1.5 rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs active:scale-95"
+                                >
+                                  <BookOpen className="w-3.5 h-3.5 text-purple-600" />
+                                  <span>📖 閱讀美食介紹專文</span>
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => openGoogleMaps(meal.name, meal.location)}
+                                  className="text-[11px] font-semibold text-gray-500 hover:text-gray-800 flex items-center gap-1 cursor-pointer"
+                                >
+                                  <span>直達店家地圖</span>
+                                  <ExternalLink className="w-3 h-3 text-gray-400" />
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
-                    <button
-                      onClick={() => openGoogleMaps(day.foodRecommend!)}
-                      className="flex-shrink-0 bg-amber-600 hover:bg-amber-700 text-white text-[11px] font-bold px-3 py-1.5 rounded-xl flex items-center gap-1 transition-all shadow-xs cursor-pointer active:scale-95"
-                      title="開啟 Google 導航"
-                    >
-                      <Navigation className="w-3.5 h-3.5 fill-current" />
-                      <span>導航</span>
-                    </button>
-                  </div>
-                )}
+                  );
+                })()}
 
                 {/* Activities with inter-spot movement indicators */}
                 <div className="space-y-3 pt-1">
@@ -895,6 +984,150 @@ export default function MyItineraryTab({
                 className="px-5 py-2 bg-[#13294B] hover:bg-[#1E3E62] text-white rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer"
               >
                 關閉地圖閱覽
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 📖 美食深度故事專文閱讀彈窗 (FOOD ARTICLE READER MODAL) */}
+      {activeFoodArticle && (
+        <div className="fixed inset-0 bg-black/65 backdrop-blur-xs z-50 flex items-start justify-center p-2 sm:p-4 overflow-y-auto">
+          <div className="bg-white w-full max-w-xl rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden animate-slide-down max-h-[92vh] flex flex-col border border-gray-100 mt-1 sm:mt-4 mb-6">
+            {/* Modal Header */}
+            <div className="bg-[#13294B] text-white p-4.5 flex justify-between items-center select-none flex-shrink-0">
+              <div className="flex items-center gap-3">
+                <span className="text-3xl p-1 bg-white/10 rounded-xl">
+                  {activeFoodArticle.type === "dessert" ? "🍧" : activeFoodArticle.type === "dinner" ? "🏮" : "🥢"}
+                </span>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-bold text-base font-display leading-tight">{activeFoodArticle.name}</h3>
+                    <span className="bg-[#E8A02C] text-[#13294B] text-[10px] font-extrabold px-2 py-0.5 rounded-full">
+                      {activeFoodArticle.categoryLabel || "特色美食專文"}
+                    </span>
+                  </div>
+                  {activeFoodArticle.location && (
+                    <p className="text-xs text-gray-300 mt-0.5 truncate">
+                      📍 {activeFoodArticle.location}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <button
+                onClick={handleCloseFoodArticle}
+                className="text-gray-300 hover:text-white bg-white/10 hover:bg-white/20 p-2 rounded-full transition-all cursor-pointer"
+                title="關閉"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* In-Modal Quick Info Bar */}
+            <div className="bg-amber-50/60 px-4 py-2.5 border-b border-amber-100 flex items-center justify-between gap-2 overflow-x-auto flex-shrink-0 text-xs">
+              <div className="flex items-center gap-2 text-amber-950 font-semibold truncate">
+                <span>🔥 招牌：{activeFoodArticle.dish}</span>
+              </div>
+              <span className="text-amber-900 font-mono font-bold flex-shrink-0 bg-white/90 border border-amber-200/80 px-2 py-0.5 rounded-lg text-[10px]">
+                💰 {activeFoodArticle.cost}
+              </span>
+            </div>
+
+            {/* Modal Scrollable Body */}
+            <div className="p-4 sm:p-6 overflow-y-auto space-y-4 flex-1">
+              {/* Audio Playback Player */}
+              <div className="bg-gradient-to-r from-amber-50/80 to-orange-50/50 border border-amber-200/80 rounded-2xl p-3.5 space-y-2.5 shadow-xs">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <button
+                      onClick={handleToggleFoodAudio}
+                      className="w-10 h-10 bg-[#E8A02C] hover:bg-amber-500 text-white rounded-full flex items-center justify-center transition-all shadow-md active:scale-95 cursor-pointer flex-shrink-0"
+                    >
+                      {isPlayingFoodAudio ? (
+                        <Pause className="w-4 h-4 fill-white" />
+                      ) : (
+                        <Play className="w-4 h-4 fill-white ml-0.5" />
+                      )}
+                    </button>
+                    <div>
+                      <span className="text-xs font-bold text-gray-900 block font-display">
+                        {isPlayingFoodAudio ? "正在朗讀美食典故說書..." : "收聽美食故事語音朗讀"}
+                      </span>
+                      <span className="text-[10px] text-gray-500 block">
+                        🎙️ 專業播音員 • 零等待秒播
+                      </span>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => openGoogleMaps(activeFoodArticle.name, activeFoodArticle.location)}
+                    className="bg-[#13294B] hover:bg-[#1E3E62] text-white text-[10px] font-bold px-3 py-1.5 rounded-xl flex items-center gap-1 transition-all shadow-xs cursor-pointer active:scale-95 flex-shrink-0"
+                  >
+                    <Navigation className="w-3 h-3 fill-current" />
+                    <span>Google 導航</span>
+                  </button>
+                </div>
+
+                {/* Progress bar */}
+                <div className="w-full bg-gray-100 rounded-full h-1 overflow-hidden">
+                  <div
+                    className="bg-[#E8A02C] h-1 transition-all duration-300"
+                    style={{ width: `${foodAudioProgress}%` }}
+                  ></div>
+                </div>
+              </div>
+
+              {/* Food In-depth Article Content */}
+              <div className="bg-[#FAF8F5] p-4.5 rounded-2xl border border-gray-100/90 shadow-xs space-y-3">
+                <h4 className="font-bold text-sm text-gray-900 flex items-center gap-1.5 font-display">
+                  <span>📖</span> 舌尖上的風土身世與料理精髓
+                </h4>
+                <div className="text-xs text-gray-700 leading-relaxed space-y-2.5 whitespace-pre-line font-serif">
+                  {activeFoodArticle.article || activeFoodArticle.highlight}
+                </div>
+              </div>
+
+              {/* On-Site Tips / Dining Etiquette */}
+              {activeFoodArticle.tips && activeFoodArticle.tips.length > 0 && (
+                <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-xs space-y-2.5">
+                  <h4 className="font-bold text-xs text-gray-900 flex items-center gap-1.5 font-display">
+                    <span>👀</span> 老饕私房吃法與推薦指南
+                  </h4>
+                  <ul className="space-y-2">
+                    {activeFoodArticle.tips.map((tip, idx) => (
+                      <li
+                        key={idx}
+                        className="bg-emerald-50/60 border border-emerald-100/80 p-2.5 rounded-xl text-xs text-emerald-950 leading-relaxed flex items-start gap-2"
+                      >
+                        <span className="w-4 h-4 rounded-full bg-emerald-600 text-white text-[9px] flex items-center justify-center flex-shrink-0 font-bold mt-0.5">
+                          {idx + 1}
+                        </span>
+                        <span>{tip}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Bottom Actions */}
+            <div className="p-3.5 bg-white border-t border-gray-200 flex items-center justify-between gap-2 flex-shrink-0">
+              <button
+                type="button"
+                onClick={handleCloseFoodArticle}
+                className="py-2 px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-bold transition-all cursor-pointer"
+              >
+                關閉專文
+              </button>
+
+              <button
+                type="button"
+                onClick={() => openGoogleMaps(activeFoodArticle.name, activeFoodArticle.location)}
+                className="py-2 px-5 bg-gradient-to-r from-amber-600 to-[#13294B] hover:opacity-95 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm cursor-pointer ml-auto active:scale-95"
+              >
+                <Navigation className="w-3.5 h-3.5 fill-current" />
+                <span>🧭 開啟 Google 導航直達現場</span>
               </button>
             </div>
           </div>

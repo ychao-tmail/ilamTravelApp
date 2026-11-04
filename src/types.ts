@@ -1,10 +1,14 @@
 export interface MealRecommend {
-  type: "lunch" | "dinner";
+  type: "lunch" | "dinner" | "dessert" | "snack" | "food";
   name: string;
   dish: string;
   cost: string;
   highlight: string;
   location?: string;
+  article?: string;          // 深度美食介紹專文
+  audioScript?: string;      // 語音說書朗讀文稿
+  tips?: string[];           // 老饕私房吃法/推薦點餐秘笈
+  categoryLabel?: string;    // 例如「🥢 傳奇老店」「🏮 夜市必吃」「🍧 古早甜品」
 }
 
 export interface Activity {
@@ -28,6 +32,7 @@ export interface DayItinerary {
   foodRecommend?: string;     // 每日美食推薦 (相容字串)
   lunch?: MealRecommend;      // 專屬午餐推薦小卡
   dinner?: MealRecommend;     // 專屬晚餐/夜市推薦小卡
+  meals?: MealRecommend[];    // 一家一張小卡：多間獨立美食小卡清單
 }
 
 export interface Spot {
