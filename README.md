@@ -14,14 +14,18 @@
 
 👉 **前往 [GitHub Releases 頁面下載最新版 APK](https://github.com/ychao-tmail/ilamTravelApp/releases)**
 
-* **最新版本**: `v1.4.0`
-* **APK 檔案**: `deepgo-taiwan-v1.4.0-debug.apk`
+* **最新版本**: `v1.4.1`
+* **APK 檔案**: `deepgo-taiwan-v1.4.1-debug.apk`
 * **安裝方式**: 下載後直接在 Android 手機上點選安裝（允許安裝未知來源應用程式）即可使用。
 
 ---
 
 ## ✨ 核心亮點特色
 
+0. **專屬「旅遊趣」官方手繪 App 圖標與全解析度適配 (v1.4.1)**
+   - 全新黃色露營車與陽光手繪風格視覺識別。
+   - 封裝 Android 全解析度自適應圖標（Adaptive Icons）、圓形圖標與啟動畫面（Splash Screen）。
+   - Web PWA、Favicon 與 App 頂部導覽列全面同步嵌入。
 1. **AI 行程地理合理性排程 (v1.4.0)**
    - 空間相鄰聚合演算法，避免跨區折返奔波（告別折返跑）。
    - 自動精算前後景點間預估里程與移動時間，旅行節奏更順暢。

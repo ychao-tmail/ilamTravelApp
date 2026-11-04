@@ -4,6 +4,25 @@
 
 ---
 
+## 🎨 [v1.4.1] - 2026-11-04
+
+### 🌟 專屬視覺識別與官方圖標升級 (Brand & App Icon Integration)
+* **全套 Android 原生 Launcher 圖標替換**：
+  - 封裝全新官方「旅遊趣」黃色露營露營車與陽光意象手繪圖標。
+  - 涵蓋所有 Android 原生解析度（`mdpi`, `hdpi`, `xhdpi`, `xxhdpi`, `xxxhdpi`）。
+  - 同步配置標準方形圓角圖標（`ic_launcher.png`）、圓形圖標（`ic_launcher_round.png`）與自適應前景圖標（`ic_launcher_foreground.png`）。
+* **自適應圖標（Adaptive Icons）背景色優化**：
+  - 更新 `ic_launcher_background.xml` 為黃色品牌主色（`#FED640`），確保在各品牌手機（Pixel、Samsung、小米、Sony 等）以圓形、淚滴形或方圓形遮罩裁切時，圖標邊角無縫融合且主視覺完全不被裁切。
+* **全新啟動畫面（Splash Screens）**：
+  - 更新全部橫式與直式解析度的 Android Splash Screen，中央嵌合專屬圖標與雅緻米白底色（`#FAF8F5`）。
+* **Web PWA 與瀏覽器 Favicon 全面同步**：
+  - 產出 `favicon.png`、`favicon.ico`、`apple-touch-icon.png`、`icon-192.png` 與 `icon.png`（512x512）。
+  - 更新 `manifest.json` 與 `index.html`，支援 Chrome PWA 安裝與 iOS 主畫面捷徑。
+* **App 頂部導覽列品牌圖標**：
+  - 於 App 頂部導覽列直接展示官方圖標，大幅提升品牌識別度與精緻質感。
+
+---
+
 ## 🚀 [v1.4.0] - 2026-11-04
 
 ### 🌟 核心新功能 (Major Features)

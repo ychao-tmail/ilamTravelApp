@@ -3,10 +3,22 @@
   "name": "全台 AI 深度旅遊導覽平台",
   "icons": [
     {
+      "src": "/icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    },
+    {
       "src": "/icon.svg",
       "type": "image/svg+xml",
       "sizes": "512x512 192x192 any",
-      "purpose": "any maskable"
+      "purpose": "any"
     }
   ],
   "start_url": "/",

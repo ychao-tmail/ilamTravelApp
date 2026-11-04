@@ -530,12 +530,16 @@ export default function App() {
         {/* Top Header navbar with Yilan styling elements */}
         <header className="bg-[#13294B] text-white px-5 py-3.5 flex justify-between items-center border-b border-[#13294B] relative shadow-xs">
           <div className="flex items-center gap-2">
-            <span className="p-1 bg-[#E8A02C] text-[#13294B] rounded-lg text-sm">🎒</span>
+            <img 
+              src="/favicon.png" 
+              alt="AI深旅 App Icon" 
+              className="w-8 h-8 rounded-lg object-cover shadow-sm border border-[#E8A02C]/50 flex-shrink-0" 
+            />
             <div>
               <div className="flex items-center gap-1.5">
                 <h1 className="text-sm font-black tracking-tight font-display">AI深旅 DeepGo</h1>
                 <span className="text-[9px] bg-[#E8A02C]/20 text-[#E8A02C] font-mono font-bold px-1.5 py-0.5 rounded-full border border-[#E8A02C]/40">
-                  v1.4.0
+                  v1.4.1
                 </span>
                 <span className="text-[8px] bg-purple-500/20 text-purple-300 font-mono px-1 py-0.5 rounded border border-purple-400/30">
                   GPT-4o
