@@ -4,6 +4,7 @@ import dotenv from "dotenv";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
 import { resolveSpotStory } from "./src/data/taiwanStories.ts";
+import { deduplicateItinerary, generateLocalSmartItinerary } from "./src/services/localPlannerEngine.ts";
 
 dotenv.config();
 
@@ -467,13 +468,15 @@ app.post("/api/itinerary-plan", async (req, res) => {
   ]
 }
 
-注意事項：
-1. 每天上午推薦1~2個景點，下午1~2個景點，夜晚推薦合適的夜市、景觀台、特色商圈或漫步點。
-2. 密切配合想去的地區 ${targetDistricts.join("、")} 與所在的目的地城市/國家/區域 ${targetCounty}。
-3. 住宿點、美食推薦應完美貼合團隊風格與當地特色（如自然生態可推薦森林民宿、豪華模式可推薦雙泉溫泉大飯店、五星酒店）。
-4. 花費、亮點與交通工具必須符合：天數 ${numDays}、風格 ${style}、交通 ${transport}、預算 ${budget}。
-5. 所有景點故事化亮點 (highlight) 的文筆風格，應完美貼合選定的表達風格【${expressStyle || "經典"}】（如「經典」要有人文感；「幽默」要風趣打趣、爆笑有趣；「教學」要深入淺出介紹地緣歷史；「英語播報」時請輸出中英雙語或英文高光解説）。
-${userNotes ? `6. 同時滿足旅客的出遊特別需求：${userNotes} (例如在餐飲時段適當關照、或將住宿點納入自定義需求)。\n7. 所有景點亮點內容要故事化、具有文學感與人文溫度。請全程採用繁體中文輸出。` : "6. 所有景點亮點內容要故事化、具有文學感與人文溫度。請全程採用繁體中文輸出。"}`;
+注意事項（嚴格防重複核心原則）：
+1. 【絕對嚴禁重複景點】：整份多天行程中，每一天的上午、下午、夜晚所有景點名稱（title）絕對不可重複！第1天出現過的景點，第2天、第3天等後續天數嚴禁再次出現！
+2. 每天上午推薦1~2個景點，下午1~2個景點，夜晚推薦合適的夜市、景觀台、特色商圈或漫步點，必須是完全不同且順路的景點。
+3. 密切配合想去的地區 ${targetDistricts.join("、")} 與所在的目的地城市/國家/區域 ${targetCounty}。
+4. 每天的住宿推薦（lodging）必須是不同風格或不同區域的特色旅宿，切勿每日重複推薦同一家！
+5. 每日美食推薦（foodRecommend）也必須每日輪替，展示不同的在地名店與街頭小吃。
+6. 花費、亮點與交通工具必須符合：天數 ${numDays}、風格 ${style}、交通 ${transport}、預算 ${budget}。
+7. 所有景點故事化亮點 (highlight) 的文筆風格，應完美貼合選定的表達風格【${expressStyle || "經典"}】（如「經典」要有人文感；「幽默」要風趣打趣、爆笑有趣；「教學」要深入淺出介紹地緣歷史；「英語播報」時請輸出中英雙語或英文高光解説）。
+${userNotes ? `8. 同時滿足旅客的出遊特別需求：${userNotes} (例如在餐飲時段適當關照、或將住宿點納入自定義需求)。\n9. 所有景點亮點內容要故事化、具有文學感與人文溫度。請全程採用繁體中文輸出。` : "8. 所有景點亮點內容要故事化、具有文學感與人文溫度。請全程採用繁體中文輸出。"}`;
 
       const result = await generateGeminiWithFallback(prompt, {
         responseMimeType: "application/json",
@@ -509,7 +512,7 @@ ${userNotes ? `6. 同時滿足旅客的出遊特別需求：${userNotes} (例如
           },
           required: ["days"]
         },
-        systemInstruction: `你是一位對全台灣各縣市（包含台北、新北、基隆、桃園、新竹、苗栗、台中、彰化、南投、雲林、嘉義、台南、高雄、屏東、宜蘭、花蓮、台東、澎湖、金門、馬祖）聊若指掌的頂尖台灣深度導覽與旅程排程專家，精通當地秘境景點、歷史背景、建築特色、在地美食與交通串聯。你擅長輸出格式整潔完美、可以被程式直接讀取解析的標準 JSON 資料規格。`
+        systemInstruction: `你是一位對全台灣各縣市（包含台北、新北、基隆、桃園、新竹、苗栗、台中、彰化、南投、雲林、嘉義、台南、高雄、屏東、宜蘭、花蓮、台東、澎湖、金門、馬祖）聊若指掌的頂尖台灣深度導覽與旅程排程專家，精通當地秘境景點、歷史背景、建築特色、在地美食與交通串聯。你擅長輸出格式整潔完美、可以被程式直接讀取解析的標準 JSON 資料規格。你特別注重行程合理性，嚴格確保多日行程中所有景點零重複、每日住宿不同、飲食特色多樣。`
       });
 
       // Check geographic rationality / compatibility on server side for Taiwan
@@ -532,6 +535,9 @@ ${userNotes ? `6. 同時滿足旅客的出遊特別需求：${userNotes} (例如
 
       const responseText = result.text || "";
       const parsed = JSON.parse(responseText.trim());
+      // Run deduplication pass to guarantee zero duplicates
+      const cleanedDays = deduplicateItinerary(parsed.days, targetCounty);
+
       let notes = getTravelNotes(style, transport, budget);
       if (geoWarningText) {
         notes = `${geoWarningText}${notes}`;
@@ -543,7 +549,7 @@ ${userNotes ? `6. 同時滿足旅客的出遊特別需求：${userNotes} (例如
       return res.json({
         success: true,
         isAi: true,
-        itinerary: parsed.days,
+        itinerary: cleanedDays,
         notes: notes
       });
       
@@ -585,24 +591,27 @@ ${userNotes ? `6. 同時滿足旅客的出遊特別需求：${userNotes} (例如
   ]
 }
 
-注意事項：
-1. 每天上午推薦1~2個景點，下午1~2個景點，夜晚推薦合適的夜市、景觀台或特色商圈。
-2. 住宿點、美食推薦應貼合風格【${style}】與預算【${budget}】。
-3. 景點亮點文筆應配合【${expressStyle || "經典"}】風格。全程繁體中文輸出。`;
+注意事項（嚴格防重複核心原則）：
+1. 【絕對嚴禁重複景點】：整份多天行程中，每一天的上午、下午、夜晚所有景點名稱（title）絕對不可重複！第1天出現過的景點，第2天、第3天等後續天數嚴禁再次出現！
+2. 每天上午推薦1~2個景點，下午1~2個景點，夜晚推薦合適的夜市、景觀台或特色商圈，必須完全是不同景點。
+3. 每天的住宿推薦（lodging）必須是不同風格或不同區域的特色旅宿，切勿每日重複推薦同一家！
+4. 每日美食推薦（foodRecommend）也必須每日輪替不同代表小吃。
+5. 景點亮點文筆應配合【${expressStyle || "經典"}】風格。全程繁體中文輸出。`;
 
-      const sysPrompt = `你是一位對全台灣各縣市聊若指掌的頂尖台灣深度導覽與旅程排程專家。你擅長輸出格式標準、無多餘雜質的合法 JSON 資料。`;
+      const sysPrompt = `你是一位對全台灣各縣市聊若指掌的頂尖台灣深度導覽與旅程排程專家。你擅長輸出格式標準、無多餘雜質的合法 JSON 資料。你特別注重行程合理性，嚴格確保多日行程中所有景點零重複、每日住宿不同、飲食特色多樣。`;
 
       const gptText = await generateOpenAICompletion(sysPrompt, prompt, true);
       if (gptText) {
         const parsed = JSON.parse(gptText);
         const days = parsed.days || parsed.itinerary || [];
         if (days && days.length > 0) {
-          const notes = `${getTravelNotes(style, transport, budget)}\n(✨ 由 OpenAI GPT-4o-mini 即時客製運算生成)`;
+          const cleanedDays = deduplicateItinerary(days, targetCounty);
+          const notes = `${getTravelNotes(style, transport, budget)}\n(✨ 由 OpenAI GPT-4o-mini 即時客製運算生成，景點全程零重複)`;
           return res.json({
             success: true,
             isAi: true,
             model: "gpt-4o-mini",
-            itinerary: days,
+            itinerary: cleanedDays,
             notes: notes
           });
         }
@@ -612,66 +621,25 @@ ${userNotes ? `6. 同時滿足旅客的出遊特別需求：${userNotes} (例如
     }
   }
 
-  // Fallback template tuned to targetCounty
-  const filteredDays = DEFAULT_ITINERARY_ACTIVITIES.slice(0, numDays);
-  
-  const tunedItinerary = filteredDays.map((dayData, dIdx) => {
-    // Dynamically replace names if county is not Yilan
-    const isYilan = targetCounty === "宜蘭縣" || targetCounty.includes("宜蘭");
-    return {
-      dayNum: dayData.dayNum,
-      lodging: isYilan 
-        ? dayData.lodging 
-        : `🏡 ${targetCounty}慢活特色設計商旅 / 優質人文住宿 (適合${style}風格團隊，享受舒適晚安氛圍)`,
-      foodRecommend: isYilan 
-        ? dayData.foodRecommend 
-        : `🍜 ${targetCounty}在地排隊美食、名產老鋪巡禮與特色商圈傳統小吃`,
-      activities: dayData.activities.map((act, aIdx) => {
-        if (isYilan) return { ...act };
-        // For non-Yilan simulation fallback
-        const customTitle = targetDistricts[aIdx % targetDistricts.length] || "代表性人文地標";
-        return {
-          time: act.time,
-          title: `${targetCounty}${customTitle}`,
-          cost: act.cost,
-          highlight: `探索【${targetCounty}】獨特的風土景致，感受專屬【${style}】風格的深度文化魅力。`,
-          theme: act.theme
-        };
-      })
-    };
+  // Fallback to robust DeepGo Local Autonomous Engine (guarantees zero duplicates, rich highlights and unique daily lodgings)
+  const localResult = generateLocalSmartItinerary({
+    county: targetCounty,
+    districts: targetDistricts,
+    days: numDays,
+    style: style || "🌲 自然生態",
+    transport: transport || "🚗 汽車",
+    budget: budget || "💰 省錢",
+    userNotes,
+    guideLength,
+    expressStyle,
+    voicePack
   });
-
-  // Check geo compatibility for fallback
-  const allTextsLowerFallback = [
-    targetCounty,
-    ...targetDistricts,
-    userNotes || ""
-  ].map(t => (t || "").toLowerCase());
-
-  const hasNorthFb = allTextsLowerFallback.some(t => t.includes("台北") || t.includes("新北") || t.includes("基隆") || t.includes("桃園") || t.includes("九份") || t.includes("淡水") || t.includes("北投"));
-  const hasSouthFb = allTextsLowerFallback.some(t => t.includes("高雄") || t.includes("台南") || t.includes("屏東") || t.includes("墾丁") || t.includes("恆春") || t.includes("安平") || t.includes("旗津"));
-  const hasEastFb = allTextsLowerFallback.some(t => t.includes("花蓮") || t.includes("台東") || t.includes("太魯閣") || t.includes("伯朗大道") || t.includes("七星潭"));
-
-  let geoWarningTextFallback = "";
-  if (hasNorthFb && hasSouthFb && numDays <= 2) {
-    geoWarningTextFallback = `⚠️ 跨界範圍提醒：偵測到您的行程跨越了「台灣北部」與「台灣南部（台南/高雄/墾丁）」。南北距離超過 300 公里，若天數僅有 1-2 天，建議規劃 3 天以上或搭乘高鐵串聯！\n\n`;
-  } else if (hasEastFb && hasSouthFb && numDays <= 2) {
-    geoWarningTextFallback = `⚠️ 跨界範圍提醒：偵測到您的行程涵蓋「花東地區」與「恆春墾丁」。中央山脈南端交通繞行耗時較長，建議適度聚焦單一地理區位！\n\n`;
-  }
-
-  let notes = getTravelNotes(style, transport, budget);
-  if (geoWarningTextFallback) {
-    notes = `${geoWarningTextFallback}${notes}`;
-  }
-  if (userNotes) {
-    notes = `📌 您的自訂備註需求：${userNotes}\n${notes}`;
-  }
 
   return res.json({
     success: true,
     isAi: false,
-    itinerary: tunedItinerary,
-    notes: `${notes} (📢 已啟用的全台灣【${targetCounty}】深旅規劃模擬。在設定中配置 GEMINI_API_KEY 即可解鎖 live AI 實時大模型客製遊！)`
+    itinerary: localResult.itinerary,
+    notes: localResult.notes
   });
   } catch (err: any) {
     console.error("Critical error in /api/itinerary-plan:", err);

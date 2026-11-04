@@ -10,6 +10,7 @@
  */
 
 import { GuidedStoryRequest, GuidedStoryResponse, ItineraryPlanRequest, ItineraryPlanResponse } from "../api/client";
+import { deduplicateItinerary } from "./localPlannerEngine";
 
 // Storage keys
 const OPENAI_API_KEY_STORAGE = "deepgo_openai_api_key";
@@ -207,12 +208,14 @@ export async function generateGptItineraryPlan(params: ItineraryPlanRequest): Pr
   ]
 }
 
-注意事項：
-1. 每天上午推薦1~2個景點，下午1~2個景點，夜晚推薦合適的夜市、景觀台或特色商圈。
-2. 住宿點、美食推薦應貼合風格【${params.style}】與預算【${params.budget}】。
-3. 景點故事亮點 (highlight) 的文筆風格應配合【${params.expressStyle || "經典"}】。全程繁體中文輸出。`;
+注意事項（核心防重複原則）：
+1. 【嚴格防重複規則】：整份行程中，所有天數的所有景點名稱（title）絕對不可重複！第1天出現過的景點，第2天、第3天等後續天數嚴禁再次出現！
+2. 每天上午推薦1~2個景點，下午1~2個景點，夜晚推薦合適的夜市、景觀台或特色商圈，必須完全是不同景點。
+3. 每天的住宿推薦（lodging）必須是不同風格或不同區域的特色旅宿，切勿每日重複推薦同一家！
+4. 每日美食推薦（foodRecommend）也必須每日輪替不同代表小吃。
+5. 景點故事亮點 (highlight) 的文筆風格應配合【${params.expressStyle || "經典"}】。全程繁體中文輸出。`;
 
-  const systemInstruction = `你是一位對全台灣各縣市（包含台北、新北、基隆、桃園、新竹、苗栗、台中、彰化、南投、雲林、嘉義、台南、高雄、屏東、宜蘭、花蓮、台東、澎湖、金門、馬祖）聊若指掌的頂尖台灣深度導覽與旅程排程專家。你擅長輸出格式標準、無多餘雜質的合法 JSON 資料。`;
+  const systemInstruction = `你是一位對全台灣各縣市（包含台北、新北、基隆、桃園、新竹、苗栗、台中、彰化、南投、雲林、嘉義、台南、高雄、屏東、宜蘭、花蓮、台東、澎湖、金門、馬祖）聊若指掌的頂尖台灣深度導覽與旅程排程專家。你擅長輸出格式標準、無多餘雜質的合法 JSON 資料。你特別注重行程合理性，嚴格確保多日行程中所有景點零重複、每日住宿不同、飲食特色多樣。`;
 
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
@@ -252,18 +255,20 @@ export async function generateGptItineraryPlan(params: ItineraryPlanRequest): Pr
     }
   }
 
-  const daysArray = parsed.days || parsed.itinerary || [];
+  const rawDays = parsed.days || parsed.itinerary || [];
+  // Post-processing deduplication pass to ensure 100% zero-duplicate spots
+  const cleanedDays = deduplicateItinerary(rawDays, targetCounty);
 
   const notes = `💡 行前溫馨小秘笈（OpenAI ${model} 智慧客製）：
-- 本行程依據您的【${params.style}】出遊偏好與【${params.transport}】交通方式為您專屬訂製。
-- 已為您串聯【${targetCounty}】${targetDistricts.join("、")}的深度文史與空間景點。
+- 本行程依據您的【${params.style}】出遊偏好與【${params.transport}】交通方式為您專屬訂製，景點全程零重複。
+- 已為您串聯【${targetCounty}】${targetDistricts.join("、")}的深度文史與空間景點，每日住宿與美食特色輪替。
 - 點擊「我的行程」分頁可隨時查閱每日細部規劃、預估花費與解鎖深度語音說書詞！${params.userNotes ? `\n📌 特別需求備註：${params.userNotes}` : ""}`;
 
   return {
     success: true,
     isAi: true,
     model: `OpenAI ${model}`,
-    itinerary: daysArray,
+    itinerary: cleanedDays,
     notes: notes
   };
 }
