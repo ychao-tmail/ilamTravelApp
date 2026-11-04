@@ -1,18 +1,18 @@
 // Intelligent Location Service for DeepGo Taiwan
-// Supports:
-// 1. Mobile Network / Cellular IP Geolocation (4G/5G 行動網路基地台/IP定位，無需任何GPS硬體權限，室內外皆可秒速定位)
-// 2. Android / Browser Geolocation (Coarse Network provider first, then Fine GPS)
-// 3. Taiwan County Boundary Matching (自動對照全台22縣市)
-// 4. LocalStorage fast caching for instant startup
+// Features:
+// 1. High-Accuracy Hardware GPS (優先衛星精準定位，支援即時追蹤 watchPosition)
+// 2. Taiwan County & Scenic Spot proximity matching
+// 3. Fallback IP / Cellular Network Geolocation (清楚標註電信機房IP誤差，絕不覆蓋有效GPS)
+// 4. Robust caching & persistence
 
 export interface DetectedLocation {
   lat: number;
   lng: number;
   name: string;
   countyName: string;
-  source: "network" | "gps" | "cache" | "manual";
-  accuracyDesc: string;
+  source: "gps" | "network" | "cache" | "manual";
   accuracyMeters?: number;
+  accuracyDesc: string;
   timestamp?: number;
 }
 
@@ -78,10 +78,10 @@ export function getCachedLocation(): DetectedLocation | null {
     const raw = localStorage.getItem(CACHE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (parsed && parsed.lat && parsed.lng) {
+      if (parsed && typeof parsed.lat === "number" && typeof parsed.lng === "number") {
         return {
           ...parsed,
-          source: "cache"
+          source: parsed.source || "cache"
         };
       }
     }
@@ -91,15 +91,132 @@ export function getCachedLocation(): DetectedLocation | null {
   return null;
 }
 
-export function saveCachedLocation(loc: DetectedLocation) {
+export function saveCachedLocation(loc: DetectedLocation, force = false) {
   try {
-    localStorage.setItem(CACHE_KEY, JSON.stringify(loc));
+    const currentCached = getCachedLocation();
+    // Protect GPS accuracy: do not allow coarse network IP to overwrite accurate GPS location
+    if (!force && currentCached && currentCached.source === "gps" && loc.source === "network") {
+      console.log("Preserving accurate GPS location over coarse cellular IP");
+      return;
+    }
+    const locWithTime: DetectedLocation = {
+      ...loc,
+      timestamp: Date.now()
+    };
+    localStorage.setItem(CACHE_KEY, JSON.stringify(locWithTime));
   } catch (e) {
     console.warn("Could not save location cache:", e);
   }
 }
 
-// 1. Mobile Network / Cellular IP Geolocation (無需GPS硬體權限，行動網路與Wi-Fi即刻秒通)
+/**
+ * 🛰️ 1. High-Accuracy Hardware GPS (優先使用)
+ * Directly requests device satellite GPS with high accuracy, zero maximumAge, and 15s timeout
+ */
+export function fetchHighAccuracyGps(timeoutMs = 15000): Promise<DetectedLocation> {
+  return new Promise((resolve, reject) => {
+    if (typeof window === "undefined" || !navigator.geolocation) {
+      reject(new Error("設備或瀏覽器不支援 GPS 定位"));
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        const accuracy = Math.round(pos.coords.accuracy || 15);
+        const { county, distanceKm } = findClosestTaiwanCounty(lat, lng);
+        
+        const locName = `${county.name}（🛰️ 衛星 GPS 精準）`;
+        const result: DetectedLocation = {
+          lat,
+          lng,
+          name: locName,
+          countyName: county.name,
+          source: "gps",
+          accuracyMeters: accuracy,
+          accuracyDesc: `衛星訊號良好 · 誤差 ±${accuracy} 公尺`,
+          timestamp: Date.now()
+        };
+
+        saveCachedLocation(result, true);
+        resolve(result);
+      },
+      (err) => {
+        let msg = "GPS 定位失敗";
+        if (err.code === 1) msg = "請允許應用程式存取精準位置（GPS）權限";
+        else if (err.code === 2) msg = "無法取得 GPS 衛星訊號，請至戶外或靠近窗邊";
+        else if (err.code === 3) msg = "GPS 衛星搜尋逾時";
+        reject(new Error(msg));
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: timeoutMs,
+        maximumAge: 0 // Always get fresh satellite data, never stale cache
+      }
+    );
+  });
+}
+
+/**
+ * 🛰️ Real-time GPS Tracking / Watch Mode (適合旅途實時計算附近景點距離)
+ */
+export function startGpsWatch(
+  onUpdate: (loc: DetectedLocation) => void,
+  onError?: (error: Error) => void
+): () => void {
+  if (typeof window === "undefined" || !navigator.geolocation) {
+    if (onError) onError(new Error("設備不支援即時 GPS"));
+    return () => {};
+  }
+
+  const watchId = navigator.geolocation.watchPosition(
+    (pos) => {
+      const lat = pos.coords.latitude;
+      const lng = pos.coords.longitude;
+      const accuracy = Math.round(pos.coords.accuracy || 15);
+      const { county } = findClosestTaiwanCounty(lat, lng);
+
+      const result: DetectedLocation = {
+        lat,
+        lng,
+        name: `${county.name}（🛰️ 即時 GPS 追蹤）`,
+        countyName: county.name,
+        source: "gps",
+        accuracyMeters: accuracy,
+        accuracyDesc: `即時追蹤中 · 誤差 ±${accuracy} 公尺`,
+        timestamp: Date.now()
+      };
+
+      saveCachedLocation(result, true);
+      onUpdate(result);
+    },
+    (err) => {
+      if (onError) onError(new Error(err.message || "GPS 追蹤中斷"));
+    },
+    {
+      enableHighAccuracy: true,
+      timeout: 15000,
+      maximumAge: 3000
+    }
+  );
+
+  return () => {
+    navigator.geolocation.clearWatch(watchId);
+  };
+}
+
+/**
+ * 2. Hardware / Browser Geolocation (相容舊呼叫)
+ */
+export function fetchDeviceGeolocation(highAccuracy = true): Promise<DetectedLocation> {
+  return fetchHighAccuracyGps(highAccuracy ? 15000 : 8000);
+}
+
+/**
+ * 📶 3. Mobile Network / Cellular IP Geolocation (備用模式)
+ * ⚠️ 說明：行動網路基地台與電信機房 IP 通常有較大誤差（數公里至數十公里），僅在無 GPS 權限或室內無衛星訊號時備用。
+ */
 export async function fetchMobileNetworkLocation(): Promise<DetectedLocation | null> {
   // Try HTTPS ipwho.is first
   try {
@@ -114,7 +231,7 @@ export async function fetchMobileNetworkLocation(): Promise<DetectedLocation | n
         const lat = Number(data.latitude);
         const lng = Number(data.longitude);
         const { county } = findClosestTaiwanCounty(lat, lng);
-        const locName = `${county.name}（📶 行動網路基地台）`;
+        const locName = `${county.name}（📶 行動網路/電信機房）`;
 
         const result: DetectedLocation = {
           lat,
@@ -122,9 +239,12 @@ export async function fetchMobileNetworkLocation(): Promise<DetectedLocation | n
           name: locName,
           countyName: county.name,
           source: "network",
-          accuracyDesc: data.city ? `${data.city} · 行動網路` : "行動網路定位"
+          accuracyMeters: 5000,
+          accuracyDesc: `電信機房估算（${data.city || county.name}，誤差較大）`,
+          timestamp: Date.now()
         };
-        saveCachedLocation(result);
+        // Don't overwrite if GPS was already active
+        saveCachedLocation(result, false);
         return result;
       }
     }
@@ -147,7 +267,7 @@ export async function fetchMobileNetworkLocation(): Promise<DetectedLocation | n
         const lat = Number(data.lat);
         const lng = Number(data.lon);
         const { county } = findClosestTaiwanCounty(lat, lng);
-        const locName = `${county.name}（📶 行動網路基地台）`;
+        const locName = `${county.name}（📶 行動網路/電信機房）`;
 
         const result: DetectedLocation = {
           lat,
@@ -155,9 +275,11 @@ export async function fetchMobileNetworkLocation(): Promise<DetectedLocation | n
           name: locName,
           countyName: county.name,
           source: "network",
-          accuracyDesc: data.city ? `${data.city} · 行動網路` : "行動網路定位"
+          accuracyMeters: 5000,
+          accuracyDesc: `電信機房估算（${data.city || county.name}，誤差較大）`,
+          timestamp: Date.now()
         };
-        saveCachedLocation(result);
+        saveCachedLocation(result, false);
         return result;
       }
     }
@@ -166,68 +288,4 @@ export async function fetchMobileNetworkLocation(): Promise<DetectedLocation | n
   }
 
   return null;
-}
-
-// 2. Hardware / Browser High-Precision GPS Geolocation (Primary recommended positioning)
-export function fetchDeviceGeolocation(highAccuracy = true): Promise<DetectedLocation> {
-  return new Promise((resolve, reject) => {
-    if (typeof window === "undefined" || !navigator.geolocation) {
-      reject(new Error("此裝置或瀏覽器不支援硬體 GPS 定位功能"));
-      return;
-    }
-
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const lat = pos.coords.latitude;
-        const lng = pos.coords.longitude;
-        const accuracy = Math.round(pos.coords.accuracy || 15);
-        const { county } = findClosestTaiwanCounty(lat, lng);
-        const sourceLabel = highAccuracy ? "🛰️ GPS 精準" : "📶 裝置粗略定位";
-        const locName = `${county.name}（${sourceLabel}）`;
-
-        const result: DetectedLocation = {
-          lat,
-          lng,
-          name: locName,
-          countyName: county.name,
-          source: highAccuracy ? "gps" : "network",
-          accuracyDesc: `誤差約 ±${accuracy} 公尺`,
-          accuracyMeters: accuracy,
-          timestamp: Date.now()
-        };
-        saveCachedLocation(result);
-        resolve(result);
-      },
-      (err) => {
-        let msg = "GPS 定位失敗";
-        if (err.code === 1) {
-          msg = "定位權限遭拒絕。請在手機或瀏覽器網址列旁允許「位置資訊」存取";
-        } else if (err.code === 2) {
-          msg = "無法取得 GPS 衛星訊號，請移動至窗邊或室外開闊處再試";
-        } else if (err.code === 3) {
-          msg = "GPS 衛星定位搜尋逾時，請確認手機已開啟「高精確度定位/GPS」";
-        }
-        reject(new Error(msg));
-      },
-      {
-        enableHighAccuracy: highAccuracy,
-        timeout: highAccuracy ? 15000 : 8000,
-        maximumAge: highAccuracy ? 0 : 30000
-      }
-    );
-  });
-}
-
-// Dedicated High-Accuracy GPS trigger with retry
-export async function fetchHighAccuracyGpsLocation(): Promise<DetectedLocation> {
-  try {
-    return await fetchDeviceGeolocation(true);
-  } catch (err: any) {
-    // If high accuracy GPS timed out, try once with coarse device fallback
-    try {
-      return await fetchDeviceGeolocation(false);
-    } catch {
-      throw err;
-    }
-  }
 }

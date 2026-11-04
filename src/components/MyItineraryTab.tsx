@@ -138,6 +138,12 @@ export default function MyItineraryTab({
     }))
   );
 
+  const openGoogleMaps = (targetName: string, locationHint?: string) => {
+    const query = [targetName, locationHint].filter(Boolean).join(" ");
+    const url = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(query)}`;
+    window.open(url, "_blank");
+  };
+
   return (
     <div className="space-y-6 fade-in p-1">
       {/* Dynamic progress bar header */}
@@ -293,7 +299,7 @@ export default function MyItineraryTab({
                   <p>目前行程表為空</p>
                   {onChangeTab && (
                     <button
-                      id="goto-planner-btn"
+                      _id="goto-planner-btn"
                       onClick={() => onChangeTab("planner")}
                       className="bg-[#13294B] text-white px-4 py-2 rounded-xl text-xs font-semibold inline-block mx-auto"
                     >
@@ -305,105 +311,273 @@ export default function MyItineraryTab({
                 itinerary
                   .filter((day) => day.dayNum === currentActiveDay)
                   .map((day) => (
-              <div key={day.dayNum} className="space-y-3">
-                {/* Dynamically display lodging and food suggestions if configured */}
+              <div key={day.dayNum} className="space-y-3.5">
+                {/* Geographic Rationality & Movement Flow Banner */}
+                {day.areaFocus && (
+                  <div className="bg-gradient-to-r from-[#13294B]/5 via-amber-50/40 to-blue-50/40 border border-[#13294B]/10 rounded-2xl p-3 flex items-center justify-between gap-2 shadow-2xs">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="w-6 h-6 rounded-lg bg-[#13294B] text-white flex items-center justify-center text-[10px] font-black flex-shrink-0 font-mono">
+                        D{day.dayNum}
+                      </span>
+                      <div className="min-w-0">
+                        <span className="text-[9px] font-bold text-gray-500 uppercase tracking-wider block">
+                          📍 當日遊歷生活圈 • 動線順向不折返
+                        </span>
+                        <h4 className="text-xs font-bold text-gray-900 truncate">
+                          {day.areaFocus}
+                        </h4>
+                      </div>
+                    </div>
+                    {day.dayTotalDistanceKm !== undefined && day.dayTotalDistanceKm > 0 && (
+                      <span className="text-[10px] font-mono font-bold text-[#13294B] bg-white border border-gray-200/80 px-2.5 py-1 rounded-xl flex-shrink-0 shadow-2xs">
+                        🚗 全日約 {day.dayTotalDistanceKm} km
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                {/* Lodging recommendation with direct navigation */}
                 {day.lodging && (
-                  <div className="bg-[#EDF4FF] border border-blue-100 rounded-2xl p-4 shadow-xs flex items-start gap-3">
-                    <span className="text-xl flex-shrink-0">🏡</span>
-                    <div className="space-y-0.5">
-                      <span className="text-[9px] font-black text-blue-600 uppercase tracking-widest block font-mono">今日推薦住宿處</span>
-                      <p className="text-xs text-blue-950 font-bold leading-relaxed">{day.lodging}</p>
+                  <div className="bg-[#EDF4FF] border border-blue-150 rounded-2xl p-3.5 shadow-xs flex items-center justify-between gap-3">
+                    <div className="flex items-start gap-2.5 min-w-0">
+                      <span className="text-xl flex-shrink-0">🏡</span>
+                      <div className="space-y-0.5 min-w-0">
+                        <span className="text-[9px] font-black text-blue-600 uppercase tracking-widest block font-mono">
+                          今日推薦住宿處
+                        </span>
+                        <p className="text-xs text-blue-950 font-bold leading-relaxed line-clamp-2">
+                          {day.lodging}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                )}
-
-                {day.foodRecommend && (
-                  <div className="bg-amber-50/70 border border-amber-100 rounded-2xl p-4 shadow-xs flex items-start gap-3">
-                    <span className="text-xl flex-shrink-0">🍽️</span>
-                    <div className="space-y-0.5">
-                      <span className="text-[9px] font-black text-amber-700 uppercase tracking-widest block font-mono">今日特色美食推薦</span>
-                      <p className="text-xs text-amber-950 font-bold leading-relaxed">{day.foodRecommend}</p>
-                    </div>
-                  </div>
-                )}
-
-                {day.activities.map((act, index) => {
-                  const isVisited = visitedSpots.includes(act.title);
-                  return (
-                    <div
-                      key={index}
-                      className={`bg-white rounded-2xl border p-4 transition-all shadow-xs flex items-start gap-3 justify-between ${
-                        isVisited
-                          ? "border-emerald-100/80 bg-emerald-50/10"
-                          : "border-gray-100 hover:border-gray-200"
-                      }`}
-                      id={`itinerary-act-${index}`}
+                    <button
+                      onClick={() => openGoogleMaps(day.lodgingLocation || day.lodging!)}
+                      className="flex-shrink-0 bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold px-3 py-1.5 rounded-xl flex items-center gap-1 transition-all shadow-xs cursor-pointer active:scale-95"
+                      title="開啟 Google 導航至此住宿處"
                     >
-                      <div className="flex gap-3">
-                        {/* Checkbox trigger visit */}
-                        <button
-                          onClick={() => onToggleVisited(act.title)}
-                          className="flex-shrink-0 mt-0.5 text-gray-400 hover:text-[#13294B] transition-all focus:outline-none"
-                          title="點擊標記走訪"
-                        >
-                          {isVisited ? (
-                            <CheckSquare className="w-5.5 h-5.5 text-emerald-600 stroke-[2.5]" />
-                          ) : (
-                            <Square className="w-5.5 h-5.5 text-gray-300 hover:text-gray-400" />
-                          )}
-                        </button>
+                      <Navigation className="w-3.5 h-3.5 fill-current" />
+                      <span>旅宿導航</span>
+                    </button>
+                  </div>
+                )}
 
-                        <div className="space-y-1.5">
-                          {/* Time & Title */}
-                          <div className="flex items-center gap-2">
-                            <span className="bg-[#13294B]/5 text-gray-500 font-mono text-[10px] px-2 py-0.5 rounded font-bold">
-                              {act.time}
+                {/* Structured Lunch Recommendation Card */}
+                {day.lunch && (
+                  <div className="bg-gradient-to-br from-amber-50/90 via-orange-50/40 to-amber-50/70 border border-amber-200/80 rounded-2xl p-3.5 shadow-xs space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="px-2 py-0.5 rounded-md bg-amber-500 text-white text-[10px] font-black font-mono shadow-2xs">
+                          🥢 在地午餐推薦
+                        </span>
+                        <span className="text-[10px] font-bold text-amber-900 font-mono">
+                          💰 {day.lunch.cost}
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => openGoogleMaps(day.lunch!.name, day.lunch!.location)}
+                        className="bg-amber-600 hover:bg-amber-700 text-white text-[11px] font-bold px-3 py-1 rounded-xl flex items-center gap-1 transition-all shadow-xs cursor-pointer active:scale-95 flex-shrink-0"
+                        title="開啟 Google 導航直達此午餐店家"
+                      >
+                        <Navigation className="w-3.5 h-3.5 fill-current" />
+                        <span>Google 導航</span>
+                      </button>
+                    </div>
+
+                    <div className="space-y-1">
+                      <h5 className="font-bold text-sm text-gray-900 font-display">
+                        {day.lunch.name}
+                      </h5>
+                      <p className="text-xs font-semibold text-amber-900">
+                        🔥 招牌必吃：{day.lunch.dish}
+                      </p>
+                      <p className="text-xs text-gray-600 leading-relaxed">
+                        {day.lunch.highlight}
+                      </p>
+                      {day.lunch.location && (
+                        <p className="text-[10px] text-gray-500 flex items-center gap-1 pt-0.5">
+                          <span>📍</span>
+                          <span className="truncate">{day.lunch.location}</span>
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Structured Dinner / Night Market Recommendation Card */}
+                {day.dinner && (
+                  <div className="bg-gradient-to-br from-indigo-50/80 via-purple-50/30 to-rose-50/50 border border-indigo-200/70 rounded-2xl p-3.5 shadow-xs space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="px-2 py-0.5 rounded-md bg-[#13294B] text-white text-[10px] font-black font-mono shadow-2xs">
+                          🏮 晚餐 / 夜市推薦
+                        </span>
+                        <span className="text-[10px] font-bold text-indigo-900 font-mono">
+                          💰 {day.dinner.cost}
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => openGoogleMaps(day.dinner!.name, day.dinner!.location)}
+                        className="bg-[#13294B] hover:bg-[#1E3E62] text-white text-[11px] font-bold px-3 py-1 rounded-xl flex items-center gap-1 transition-all shadow-xs cursor-pointer active:scale-95 flex-shrink-0"
+                        title="開啟 Google 導航直達此晚餐或夜市"
+                      >
+                        <Navigation className="w-3.5 h-3.5 fill-current" />
+                        <span>Google 導航</span>
+                      </button>
+                    </div>
+
+                    <div className="space-y-1">
+                      <h5 className="font-bold text-sm text-gray-900 font-display">
+                        {day.dinner.name}
+                      </h5>
+                      <p className="text-xs font-semibold text-indigo-950">
+                        🔥 排隊亮點：{day.dinner.dish}
+                      </p>
+                      <p className="text-xs text-gray-600 leading-relaxed">
+                        {day.dinner.highlight}
+                      </p>
+                      {day.dinner.location && (
+                        <p className="text-[10px] text-gray-500 flex items-center gap-1 pt-0.5">
+                          <span>📍</span>
+                          <span className="truncate">{day.dinner.location}</span>
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Fallback legacy food recommendation if structured meals not present */}
+                {!day.lunch && !day.dinner && day.foodRecommend && (
+                  <div className="bg-amber-50/70 border border-amber-100 rounded-2xl p-3.5 shadow-xs flex items-center justify-between gap-3">
+                    <div className="flex items-start gap-2.5 min-w-0">
+                      <span className="text-xl flex-shrink-0">🍽️</span>
+                      <div className="space-y-0.5 min-w-0">
+                        <span className="text-[9px] font-black text-amber-700 uppercase tracking-widest block font-mono">今日特色美食推薦</span>
+                        <p className="text-xs text-amber-950 font-bold leading-relaxed line-clamp-2">{day.foodRecommend}</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => openGoogleMaps(day.foodRecommend!)}
+                      className="flex-shrink-0 bg-amber-600 hover:bg-amber-700 text-white text-[11px] font-bold px-3 py-1.5 rounded-xl flex items-center gap-1 transition-all shadow-xs cursor-pointer active:scale-95"
+                      title="開啟 Google 導航"
+                    >
+                      <Navigation className="w-3.5 h-3.5 fill-current" />
+                      <span>導航</span>
+                    </button>
+                  </div>
+                )}
+
+                {/* Activities with inter-spot movement indicators */}
+                <div className="space-y-3 pt-1">
+                  {day.activities.map((act, index) => {
+                    const isVisited = visitedSpots.includes(act.title);
+                    return (
+                      <div key={index} className="space-y-2">
+                        {/* Smooth Transit Connection Badge between spots */}
+                        {index > 0 && (
+                          <div className="flex items-center gap-2 pl-4 py-0.5 select-none">
+                            <div className="w-0.5 h-5 bg-gradient-to-b from-[#13294B]/30 to-amber-500/40 rounded-full ml-2"></div>
+                            <span className="text-[10px] font-bold text-gray-500 bg-gray-100/90 border border-gray-200/80 px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-2xs font-mono">
+                              {act.travelTimeDesc || (act.distanceFromPrevKm ? `🚗 車程約 ${Math.round(act.distanceFromPrevKm * 3)} 分鐘 · ${act.distanceFromPrevKm} 公里` : "🚗 順向移動")}
                             </span>
-                            <h4 className={`font-bold text-sm font-display ${isVisited ? "text-gray-500 line-through" : "text-gray-900"}`}>
-                              {act.title}
-                            </h4>
+                          </div>
+                        )}
+
+                        {/* Activity Spot Card */}
+                        <div
+                          className={`bg-white rounded-2xl border p-4 transition-all shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                            isVisited
+                              ? "border-emerald-100/80 bg-emerald-50/10"
+                              : "border-gray-150 hover:border-gray-250"
+                          }`}
+                          id={`itinerary-act-${index}`}
+                        >
+                          <div className="flex items-start gap-3 min-w-0 flex-1">
+                            {/* Checkbox trigger visit */}
+                            <button
+                              onClick={() => onToggleVisited(act.title)}
+                              className="flex-shrink-0 mt-0.5 text-gray-400 hover:text-[#13294B] transition-all focus:outline-none cursor-pointer"
+                              title="點擊標記走訪"
+                            >
+                              {isVisited ? (
+                                <CheckSquare className="w-5.5 h-5.5 text-emerald-600 stroke-[2.5]" />
+                              ) : (
+                                <Square className="w-5.5 h-5.5 text-gray-300 hover:text-gray-400" />
+                              )}
+                            </button>
+
+                            <div className="space-y-1.5 min-w-0 flex-1">
+                              {/* Time, Title & Location */}
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="bg-[#13294B]/5 text-gray-500 font-mono text-[10px] px-2 py-0.5 rounded font-bold">
+                                  {act.time}
+                                </span>
+                                <h4 className={`font-bold text-sm font-display ${isVisited ? "text-gray-500 line-through" : "text-gray-900"}`}>
+                                  {act.title}
+                                </h4>
+                              </div>
+
+                              {act.location && (
+                                <p className="text-[10px] text-gray-400 font-mono flex items-center gap-1">
+                                  <span>📍</span>
+                                  <span className="truncate">{act.location}</span>
+                                </p>
+                              )}
+
+                              {/* Highlight and metadata */}
+                              <div className="space-y-1 text-xs text-gray-600 leading-relaxed">
+                                <p className="flex items-start gap-1">
+                                  <CornerDownRight className="w-3.5 h-3.5 mt-0.5 text-gray-300 flex-shrink-0" />
+                                  <span>{act.highlight}</span>
+                                </p>
+                                <div className="flex flex-wrap items-center gap-2 pl-4 pt-1">
+                                  <span className="bg-[#D2691E]/5 text-[#D2691E] border border-[#D2691E]/10 text-[9px] px-1.5 py-0.5 rounded-full font-semibold">
+                                    💰 {act.cost}
+                                  </span>
+                                  <span className="bg-[#13294B]/5 text-[#13294B] border border-[#13294B]/10 text-[9px] px-1.5 py-0.5 rounded-full font-semibold">
+                                    📚 導覽主題：{act.theme}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
                           </div>
 
-                          {/* Highlight and metadata */}
-                          <div className="space-y-1 text-xs text-gray-600 leading-relaxed">
-                            <p className="flex items-start gap-1">
-                              <CornerDownRight className="w-3.5 h-3.5 mt-0.5 text-gray-300 flex-shrink-0" />
-                              <span>{act.highlight}</span>
-                            </p>
-                            <div className="flex flex-wrap items-center gap-2 pl-4 pt-1">
-                              <span className="bg-[#D2691E]/5 text-[#D2691E] border border-[#D2691E]/10 text-[9px] px-1.5 py-0.5 rounded-full font-semibold">
-                                💰 {act.cost}
-                              </span>
-                              <span className="bg-[#13294B]/5 text-[#13294B] border border-[#13294B]/10 text-[9px] px-1.5 py-0.5 rounded-full font-semibold">
-                                📚 導覽主題：{act.theme}
-                              </span>
-                            </div>
+                          {/* Action Buttons: Google Maps Navigation & In-Depth Guide */}
+                          <div className="flex items-center gap-2 self-end sm:self-center flex-shrink-0 pt-2 sm:pt-0">
+                            {/* Direct Google Maps Navigation Button */}
+                            <button
+                              onClick={() => openGoogleMaps(act.title, act.location)}
+                              className="bg-[#13294B] hover:bg-[#1E3E62] text-white text-[11px] font-bold py-1.5 px-3 rounded-xl flex items-center gap-1.5 transition-all shadow-xs cursor-pointer active:scale-95"
+                              title="直接開啟 Google 導航前往此景點"
+                            >
+                              <Navigation className="w-3.5 h-3.5 fill-current text-amber-400" />
+                              <span>Google 導航</span>
+                            </button>
+
+                            {/* Featured Article Reader */}
+                            {onOpenSpotGuide ? (
+                              <button
+                                onClick={() => onOpenSpotGuide(act.title, act.theme)}
+                                className="text-[#13294B] hover:text-[#E8A02C] text-[11px] font-bold py-1.5 px-3 bg-amber-50/80 hover:bg-amber-100 rounded-xl flex items-center gap-1.5 transition-all border border-amber-200/70 shadow-xs cursor-pointer active:scale-95"
+                                title="開啟此景點的深度特色導覽專文"
+                              >
+                                <BookOpen className="w-3.5 h-3.5 text-[#E8A02C]" />
+                                <span>特色專文</span>
+                              </button>
+                            ) : onChangeTab && (
+                              <button
+                                onClick={() => onChangeTab("explore")}
+                                className="text-[#13294B] hover:text-[#E8A02C] text-[11px] font-bold py-1.5 px-3 bg-amber-50/80 hover:bg-amber-100 rounded-xl flex items-center gap-1.5 transition-all border border-amber-200/70 shadow-xs cursor-pointer active:scale-95"
+                              >
+                                <BookOpen className="w-3.5 h-3.5 text-[#E8A02C]" />
+                                <span>特色專文</span>
+                              </button>
+                            )}
                           </div>
                         </div>
                       </div>
-
-                      {/* Guide link flag */}
-                      {onOpenSpotGuide ? (
-                        <button
-                          onClick={() => onOpenSpotGuide(act.title, act.theme)}
-                          className="text-[#13294B] hover:text-[#E8A02C] text-[11px] font-bold py-1.5 px-3 bg-amber-50/80 hover:bg-amber-100 rounded-xl flex items-center gap-1.5 transition-all self-center border border-amber-200/70 shadow-xs cursor-pointer flex-shrink-0"
-                          title="開啟此景點的深度特色導覽專文"
-                        >
-                          <BookOpen className="w-3.5 h-3.5 text-[#E8A02C]" />
-                          <span>特色專文</span>
-                        </button>
-                      ) : onChangeTab && (
-                        <button
-                          onClick={() => onChangeTab("explore")}
-                          className="text-[#13294B] hover:text-[#E8A02C] text-[11px] font-bold py-1.5 px-3 bg-amber-50/80 hover:bg-amber-100 rounded-xl flex items-center gap-1.5 transition-all self-center border border-amber-200/70 shadow-xs cursor-pointer flex-shrink-0"
-                        >
-                          <BookOpen className="w-3.5 h-3.5 text-[#E8A02C]" />
-                          <span>特色專文</span>
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
             ))
         )}
@@ -650,19 +824,32 @@ export default function MyItineraryTab({
                             <span className="text-[9px] text-[#13294B] font-bold bg-[#13294B]/5 px-2 py-0.5 rounded-full font-sans">
                               📍 {spot.coords.region}
                             </span>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onToggleVisited(spot.title);
-                              }}
-                              className={`text-[9px] font-semibold px-2 py-0.8 rounded-lg border transition-all flex items-center gap-1 cursor-pointer ${
-                                isVisited
-                                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                                  : "bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100"
-                              }`}
-                            >
-                              {isVisited ? "✓ 已走訪" : "🏁 記入完成"}
-                            </button>
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openGoogleMaps(spot.title, (spot as any).location);
+                                }}
+                                className="text-[9px] font-bold px-2 py-1 rounded-lg bg-[#13294B] text-white hover:bg-[#1E3E62] transition-all flex items-center gap-1 cursor-pointer active:scale-95 shadow-2xs"
+                                title="開啟 Google 導航直達現場"
+                              >
+                                <Navigation className="w-3 h-3 fill-current text-amber-400" />
+                                <span>導航</span>
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onToggleVisited(spot.title);
+                                }}
+                                className={`text-[9px] font-semibold px-2 py-0.8 rounded-lg border transition-all flex items-center gap-1 cursor-pointer ${
+                                  isVisited
+                                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                    : "bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100"
+                                }`}
+                              >
+                                {isVisited ? "✓ 已走訪" : "🏁 記入完成"}
+                              </button>
+                            </div>
                           </div>
                         </div>
                       );

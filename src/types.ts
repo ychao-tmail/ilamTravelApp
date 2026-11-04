@@ -1,16 +1,33 @@
+export interface MealRecommend {
+  type: "lunch" | "dinner";
+  name: string;
+  dish: string;
+  cost: string;
+  highlight: string;
+  location?: string;
+}
+
 export interface Activity {
   time: string;
   title: string;
   cost: string;
   highlight: string;
   theme: string;
+  location?: string;
+  distanceFromPrevKm?: number;
+  travelTimeDesc?: string;
 }
 
 export interface DayItinerary {
   dayNum: number;
+  areaFocus?: string;         // 當日核心遊歷生活圈/行政區
+  dayTotalDistanceKm?: number;// 當日預估總移動里程
   activities: Activity[];
-  lodging?: string;      // 每日住宿推薦
-  foodRecommend?: string; // 每日美食推薦
+  lodging?: string;           // 每日住宿推薦
+  lodgingLocation?: string;   // 住宿導航地址/名稱
+  foodRecommend?: string;     // 每日美食推薦 (相容字串)
+  lunch?: MealRecommend;      // 專屬午餐推薦小卡
+  dinner?: MealRecommend;     // 專屬晚餐/夜市推薦小卡
 }
 
 export interface Spot {

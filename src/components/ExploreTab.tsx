@@ -1,11 +1,19 @@
-import { useState, useEffect, useRef } from "react";
-import { Search, Sparkles, Volume2, BookOpen, Compass, CornerDownRight, Play, Pause, Check, MapPin, Share2, Layers, Headphones, FileText, CheckCircle2, ChevronRight, X, Wifi, Radio, Navigation, Mic, VolumeX, Key, RefreshCw, Sliders } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Search, Sparkles, Volume2, BookOpen, Compass, CornerDownRight, Play, Pause, Check, MapPin, Share2, Layers, Headphones, FileText, CheckCircle2, ChevronRight, X, Wifi, Radio, Navigation } from "lucide-react";
 import { Spot } from "../types";
 import { resolveSpotStory, FeaturedStoryArticle } from "../data/taiwanStories";
 import { apiClient } from "../api/client";
 import { 
+  generateGptGuidedStory, 
+  getOpenAIApiKey, 
+  getSelectedOpenAIModel,
+  getSelectedAiEngine 
+} from "../services/gptService";
+import { 
   fetchMobileNetworkLocation, 
   fetchDeviceGeolocation, 
+  fetchHighAccuracyGps,
+  startGpsWatch,
   getCachedLocation, 
   saveCachedLocation, 
   calcDistanceKm, 
@@ -13,12 +21,6 @@ import {
   TAIWAN_COUNTIES, 
   DetectedLocation 
 } from "../services/locationService";
-import { 
-  synthesizeGptSpeech, 
-  getOpenAIApiKey, 
-  setOpenAIApiKey, 
-  testOpenAIConnection 
-} from "../services/gptService";
 
 // Flagship spots across Taiwan (North, Central, South, East, Offshore)
 export const DEFAULT_SPOTS: Spot[] = [
@@ -392,24 +394,25 @@ export default function ExploreTab({
   const [locatingMethod, setLocatingMethod] = useState<"network" | "gps" | null>(null);
   const [locationStatusNotice, setLocationStatusNotice] = useState<string | null>(null);
   const [showLocationPicker, setShowLocationPicker] = useState(false);
+  const [isGpsTracking, setIsGpsTracking] = useState(false);
 
-  // 1. Hardware GPS Satellite Geolocation (戶外精準定位)
+  // 1. High-Accuracy Satellite GPS Location (首選精準模式)
   const handleLocateViaGps = async () => {
     setIsLocating(true);
     setLocatingMethod("gps");
-    setLocationStatusNotice("🛰️ 正在搜尋 GPS 衛星訊號（建議在戶外或靠窗處）...");
+    setLocationStatusNotice("🛰️ 正在連線 GPS 衛星，取得精準公尺級座標...");
 
     try {
-      const gpsLoc = await fetchDeviceGeolocation(true);
+      const gpsLoc = await fetchHighAccuracyGps(15000);
       setUserCoords(gpsLoc);
-      setLocationStatusNotice(`✅ GPS 衛星精準鎖定：${gpsLoc.countyName}（${gpsLoc.accuracyDesc}）`);
+      setLocationStatusNotice(`✅ GPS 衛星精準定位成功：${gpsLoc.countyName}（誤差 ±${gpsLoc.accuracyMeters || 10} 公尺）`);
       if (onUserCountyDetected) {
         const { county } = findClosestTaiwanCounty(gpsLoc.lat, gpsLoc.lng);
         onUserCountyDetected(county.countyKey);
       }
     } catch (err: any) {
-      console.warn("GPS locate error:", err);
-      setLocationStatusNotice(`⚠️ 若您在建築物內衛星訊號弱，可點擊「📶 行動網路定位」或「📍 切換縣市」！`);
+      console.warn("GPS locate failed or denied:", err);
+      setLocationStatusNotice(err?.message || "無法取得 GPS 衛星訊號，請至戶外開闊處或檢查定位權限");
     } finally {
       setIsLocating(false);
       setLocatingMethod(null);
@@ -417,42 +420,60 @@ export default function ExploreTab({
     }
   };
 
-  // 2. Mobile Network & Cell Tower Location (室內/建築物內定位，無需衛星視線)
+  // 2. Real-time GPS Watch Tracking (即時動態追蹤旅行者位置)
+  const handleToggleGpsTracking = () => {
+    if (isGpsTracking) {
+      setIsGpsTracking(false);
+      setLocationStatusNotice("已停止即時 GPS 追蹤");
+      setTimeout(() => setLocationStatusNotice(null), 3000);
+    } else {
+      setIsGpsTracking(true);
+      setLocationStatusNotice("🛰️ 已開啟即時 GPS 動態追蹤，移動時自動計算最近景點里程");
+      setTimeout(() => setLocationStatusNotice(null), 4000);
+    }
+  };
+
+  // Continuous watch effect when tracking is enabled
+  useEffect(() => {
+    if (!isGpsTracking) return;
+    const stopWatch = startGpsWatch(
+      (loc) => {
+        setUserCoords(loc);
+        if (onUserCountyDetected) {
+          const { county } = findClosestTaiwanCounty(loc.lat, loc.lng);
+          onUserCountyDetected(county.countyKey);
+        }
+      },
+      (err) => {
+        console.warn("GPS tracking error:", err);
+      }
+    );
+    return () => {
+      stopWatch();
+    };
+  }, [isGpsTracking, onUserCountyDetected]);
+
+  // 3. Mobile Network Location (4G/5G 行動網路基地台/電信機房 IP 定位 - 僅供備用)
   const handleLocateViaMobileNetwork = async () => {
     setIsLocating(true);
     setLocatingMethod("network");
-    setLocationStatusNotice("📶 正在查詢行動網路基地台與 Wi-Fi 定位（室內推薦）...");
+    setLocationStatusNotice("📶 正在以電信網路 IP 查詢概略位置（⚠️ 提示：電信業者機房通常位於台北/都會區，誤差較大）...");
 
     try {
-      // First try low-accuracy device network (Wi-Fi / cell tower triangulation, works indoors)
-      let netLoc: DetectedLocation | null = null;
-      try {
-        netLoc = await fetchDeviceGeolocation(false);
-      } catch {
-        // Fallback to IP cellular network
-        netLoc = await fetchMobileNetworkLocation();
-      }
-
+      const netLoc = await fetchMobileNetworkLocation();
       if (netLoc) {
-        const indoorLoc: DetectedLocation = {
-          ...netLoc,
-          source: "network",
-          name: `${netLoc.countyName}（📶 行動基地台）`,
-          accuracyDesc: "室內/基地台定位"
-        };
-        setUserCoords(indoorLoc);
-        saveCachedLocation(indoorLoc);
-        setLocationStatusNotice(`✅ 已切換為行動網路定位：${netLoc.countyName}（室內訊號良好）`);
+        setUserCoords(netLoc);
+        setLocationStatusNotice(`ℹ️ 已取得網路概估位置：${netLoc.countyName}（電信機房位置，建議點擊「GPS精準」取得真正座標）`);
         if (onUserCountyDetected) {
           const { county } = findClosestTaiwanCounty(netLoc.lat, netLoc.lng);
           onUserCountyDetected(county.countyKey);
         }
       } else {
-        setLocationStatusNotice("⚠️ 行動網路基地台查詢無回應，可點選「切換縣市」手動指定");
+        setLocationStatusNotice("行動網路定位逾時，維持目前所在地");
       }
-    } catch (e: any) {
+    } catch (e) {
       console.warn("Mobile network locate error:", e);
-      setLocationStatusNotice("行動網路訊號不穩，可點選「切換縣市」手動指定");
+      setLocationStatusNotice("行動網路訊號不穩，請稍候再試");
     } finally {
       setIsLocating(false);
       setLocatingMethod(null);
@@ -461,10 +482,19 @@ export default function ExploreTab({
   };
 
   // Auto detect location on initial app launch:
-  // Strictly prioritizes GPS satellite location, avoiding inaccurate cellular IP overrides
+  // 優先嘗試高精準 GPS 衛星定位；若在室內或尚未授權，則讀取快取或備用電信網路，絕不讓錯誤 IP 覆蓋精準 GPS
   useEffect(() => {
-    // Attempt high accuracy GPS on start
-    fetchDeviceGeolocation(true)
+    const cached = getCachedLocation();
+    if (cached && cached.source === "gps") {
+      setUserCoords(cached);
+      if (onUserCountyDetected) {
+        const { county } = findClosestTaiwanCounty(cached.lat, cached.lng);
+        onUserCountyDetected(county.countyKey);
+      }
+    }
+
+    // Try fresh high-accuracy satellite GPS first
+    fetchHighAccuracyGps(10000)
       .then((gpsLoc) => {
         if (gpsLoc) {
           setUserCoords(gpsLoc);
@@ -474,9 +504,22 @@ export default function ExploreTab({
           }
         }
       })
-      .catch((err) => {
-        // If GPS is not yet permitted on initial boot, preserve cached/default location without forcing inaccurate IP
-        console.log("Initial GPS auto-detect waiting for user permission:", err?.message);
+      .catch((_err) => {
+        // If GPS is not available or not yet granted, fallback gracefully
+        const existing = getCachedLocation();
+        if (!existing || existing.source !== "gps") {
+          fetchMobileNetworkLocation()
+            .then((netLoc) => {
+              if (netLoc) {
+                setUserCoords(netLoc);
+                if (onUserCountyDetected) {
+                  const { county } = findClosestTaiwanCounty(netLoc.lat, netLoc.lng);
+                  onUserCountyDetected(county.countyKey);
+                }
+              }
+            })
+            .catch(() => {});
+        }
       });
   }, []);
 
@@ -492,26 +535,14 @@ export default function ExploreTab({
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [usedAiModel, setUsedAiModel] = useState<string | null>(null);
 
-  // Audio playback state (supports GPT OpenAI TTS + Web Speech fallback)
+  // Web Speech audio state
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
-  const [isLoadingAudio, setIsLoadingAudio] = useState(false);
   const [audioProgress, setAudioProgress] = useState(0);
-  const [audioEngineUsed, setAudioEngineUsed] = useState<"gpt" | "web_speech" | null>(null);
-  const [selectedGptVoice, setSelectedGptVoice] = useState<"nova" | "shimmer" | "alloy" | "onyx" | "echo">("nova");
-  const [showGptKeyModal, setShowGptKeyModal] = useState(false);
-  const [tempGptKey, setTempGptKey] = useState(() => getOpenAIApiKey());
-  const [isTestingGptKey, setIsTestingGptKey] = useState(false);
-  const [gptKeyTestResult, setGptKeyTestResult] = useState<{ ok: boolean; msg: string } | null>(null);
-  const activeAudioRef = useRef<HTMLAudioElement | null>(null);
 
   // Stop audio on unmount
   useEffect(() => {
     return () => {
-      if (activeAudioRef.current) {
-        activeAudioRef.current.pause();
-        activeAudioRef.current = null;
-      }
-      if (typeof window !== "undefined" && window.speechSynthesis) {
+      if (window.speechSynthesis) {
         window.speechSynthesis.cancel();
       }
     };
@@ -589,7 +620,21 @@ export default function ExploreTab({
     onUnlockStory(activeSpot.name, theme, article.tag);
   };
 
-  // Generate live AI customized voice script via Gemini
+  // 1. Reset to original authentic Google Voice text (原汁原味預設手稿)
+  const handleResetToDefaultVoiceStory = () => {
+    if (!currentArticle) return;
+    if (window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
+    setIsPlayingAudio(false);
+    setGuideText(currentArticle.audioScript);
+    setIsAiCustomized(false);
+    setUsedAiModel(null);
+    setToastMsg("🎙️ 已恢復預設 Google 語音原創手稿說書（免等待、免消耗 API 額度）");
+    setTimeout(() => setToastMsg(null), 4000);
+  };
+
+  // 2. Custom Speech Script generated via OpenAI GPT API on user demand
   const handleCustomizeWithAi = async () => {
     if (!activeSpot) return;
     setIsLoadingAi(true);
@@ -601,8 +646,10 @@ export default function ExploreTab({
     }
     setIsPlayingAudio(false);
 
+    const modelName = getSelectedOpenAIModel();
     try {
-      const data = await apiClient.generateGuidedStory({
+      // Prioritize GPT API (GPT-4o / GPT-4o-mini)
+      const data = await generateGptGuidedStory({
         spotName: activeSpot.name,
         theme: selectedTheme,
         lengthStyle: selectedGuideLength,
@@ -613,141 +660,110 @@ export default function ExploreTab({
       if (data && data.text) {
         setGuideText(data.text);
         setIsAiCustomized(true);
-        setUsedAiModel(data.model || "gemini-3.8-flash");
+        setUsedAiModel(`GPT (${data.model || modelName})`);
         setJustGeneratedSuccess(true);
-        setToastMsg(`✅ 已由 Gemini 生成【${selectedGuideLength} / ${selectedExpressStyle} / ${selectedVoicePack}】專屬說書詞！`);
+        setToastMsg(`✅ 已由 GPT (${data.model || modelName}) 成功產生【${selectedGuideLength} / ${selectedExpressStyle} / ${selectedVoicePack}】專屬客製說書詞！`);
         return;
       }
-      throw new Error("API did not return valid text");
+      throw new Error("GPT API 未回傳有效文字");
     } catch (e: any) {
-      console.warn("AI generation failed or offline, fallback to styled authentic script:", e);
-      // High-fidelity fallback preserving verified authentic content
-      const fallbackArticle = resolveSpotStory(activeSpot.name, selectedTheme);
-      let localScript = fallbackArticle.audioScript;
-      if (selectedExpressStyle === "幽默") {
-        localScript = `💥 各位客官坐好囉！聽我來扒一扒【${activeSpot.name}】的精彩身世！關於這裡的【${selectedTheme}】：\n\n${fallbackArticle.audioScript}\n\n這才叫真真正正的深度台灣漫遊！`;
-      } else if (selectedExpressStyle === "教學") {
-        localScript = `🎓 各位旅客，請翻開台灣風土人文講義。今天在【${activeSpot.name}】，我們特別講授其【${selectedTheme}】：\n\n${fallbackArticle.audioScript}\n\n請大家在現場特別留意其空間構造、歷史脈絡與生活細節。`;
-      } else if (selectedVoicePack === "英語播報") {
-        localScript = `Welcome to explore ${activeSpot.name} in Taiwan!\n\n${fallbackArticle.audioScript}\n\nEnjoy your deep journey through Taiwan's rich history and culture!`;
-      } else if (selectedVoicePack === "可愛孩子") {
-        localScript = `👶 哇！大哥哥大姊姊快看！這裡就是【${activeSpot.name}】唷！\n\n${fallbackArticle.audioScript}\n\n是不是超級神奇？我們一起去探險吧！`;
+      console.warn("GPT direct generation failed, fallback to server/client:", e);
+      try {
+        const serverData = await apiClient.generateGuidedStory({
+          spotName: activeSpot.name,
+          theme: selectedTheme,
+          lengthStyle: selectedGuideLength,
+          voiceStyle: selectedExpressStyle,
+          voiceTone: selectedVoicePack
+        });
+        if (serverData && serverData.text) {
+          setGuideText(serverData.text);
+          setIsAiCustomized(true);
+          setUsedAiModel(serverData.model || "AI智慧引擎");
+          setJustGeneratedSuccess(true);
+          setToastMsg(`✅ 已客製生成【${selectedGuideLength} / ${selectedExpressStyle} / ${selectedVoicePack}】說書詞！`);
+          return;
+        }
+      } catch (err2) {
+        // High-fidelity fallback preserving verified authentic content
+        const fallbackArticle = resolveSpotStory(activeSpot.name, selectedTheme);
+        let localScript = fallbackArticle.audioScript;
+        if (selectedExpressStyle === "幽默") {
+          localScript = `💥 各位客官坐好囉！聽我來扒一扒【${activeSpot.name}】的精彩身世！關於這裡的【${selectedTheme}】：\n\n${fallbackArticle.audioScript}\n\n這才叫真真正正的深度台灣漫遊！`;
+        } else if (selectedExpressStyle === "教學") {
+          localScript = `🎓 各位旅客，請翻開台灣風土人文講義。今天在【${activeSpot.name}】，我們特別講授其【${selectedTheme}】：\n\n${fallbackArticle.audioScript}\n\n請大家在現場特別留意其空間構造、歷史脈絡與生活細節。`;
+        } else if (selectedVoicePack === "英語播報") {
+          localScript = `Welcome to explore ${activeSpot.name} in Taiwan!\n\n${fallbackArticle.audioScript}\n\nEnjoy your deep journey through Taiwan's rich history and culture!`;
+        } else if (selectedVoicePack === "可愛孩子") {
+          localScript = `👶 哇！大哥哥大姊姊快看！這裡就是【${activeSpot.name}】唷！\n\n${fallbackArticle.audioScript}\n\n是不是超級神奇？我們一起去探險吧！`;
+        }
+        setGuideText(localScript);
+        setIsAiCustomized(true);
+        setUsedAiModel("離線精選智慧");
+        setJustGeneratedSuccess(true);
+        setToastMsg(`✨ 已生成【${selectedGuideLength} / ${selectedExpressStyle} / ${selectedVoicePack}】典藏導覽說書詞！`);
       }
-      setGuideText(localScript);
-      setIsAiCustomized(true);
-      setJustGeneratedSuccess(true);
-      setToastMsg(`✨ 已生成【${selectedGuideLength} / ${selectedExpressStyle} / ${selectedVoicePack}】典藏導覽說書詞！`);
     } finally {
       setIsLoadingAi(false);
     }
   };
 
-  const triggerToast = (msg: string) => {
-    setToastMsg(msg);
-    setTimeout(() => {
-      setToastMsg((current) => (current === msg ? null : current));
-    }, 3200);
-  };
-
-  // Stop all active audio playback (both HTML5 Audio and Web Speech)
-  const stopAllAudio = () => {
-    if (activeAudioRef.current) {
-      activeAudioRef.current.pause();
-      activeAudioRef.current.currentTime = 0;
-      activeAudioRef.current = null;
-    }
-    if (typeof window !== "undefined" && window.speechSynthesis) {
-      window.speechSynthesis.cancel();
-    }
-    setIsPlayingAudio(false);
-    setIsLoadingAudio(false);
-    setAudioProgress(0);
-    setAudioEngineUsed(null);
-  };
-
-  // Dual Audio Playback Engine: prioritizes GPT Voice (OpenAI TTS), with Web Speech fallback
-  const handleToggleAudio = async (overrideText?: string | React.MouseEvent<any> | any) => {
-    if (isPlayingAudio || isLoadingAudio) {
-      stopAllAudio();
+  // Audio Playback with Web Speech API (預設 Google 國語 / 中文 (台灣) TTS 語音，零等待秒播)
+  const handleToggleAudio = () => {
+    if (!window.speechSynthesis) {
+      alert("您的瀏覽器尚不支援內建語音播放 Web Speech API。");
       return;
     }
 
-    const textToSpeak = (typeof overrideText === "string" ? overrideText : null) || guideText || currentArticle?.audioScript || "歡迎收聽台灣深度語音導覽。";
-    const openAiKey = getOpenAIApiKey();
-
-    // 1. If OpenAI API Key is configured, use GPT Text-to-Speech (High quality MP3 audio stream, works on ALL Android WebViews)
-    if (openAiKey) {
-      setIsLoadingAudio(true);
-      setToastMsg("🎙️ 正在連線 GPT 擬真語音說書引擎...");
-      try {
-        const audioUrl = await synthesizeGptSpeech(textToSpeak, selectedGptVoice, speechRate);
-        stopAllAudio();
-        const audio = new Audio(audioUrl);
-        activeAudioRef.current = audio;
-
-        audio.ontimeupdate = () => {
-          if (audio.duration) {
-            setAudioProgress(Math.round((audio.currentTime / audio.duration) * 100));
-          }
-        };
-
-        audio.onended = () => {
-          setIsPlayingAudio(false);
-          setAudioProgress(100);
-          activeAudioRef.current = null;
-        };
-
-        audio.onerror = () => {
-          setIsPlayingAudio(false);
-          setIsLoadingAudio(false);
-          triggerToast("GPT 語音播放失敗，請檢查網路連線或金鑰");
-        };
-
-        await audio.play();
-        setIsPlayingAudio(true);
-        setIsLoadingAudio(false);
-        setAudioEngineUsed("gpt");
-        setToastMsg(`🔊 正在播放 GPT 擬真說書（語音：${selectedGptVoice} · ${speechRate}x）`);
-        return;
-      } catch (err: any) {
-        setIsLoadingAudio(false);
-        console.warn("GPT TTS failed:", err);
-        if (err?.message === "NO_OPENAI_KEY" || err?.message?.includes("API key")) {
-          setShowGptKeyModal(true);
-          return;
-        }
-        triggerToast(`GPT 語音連線異常: ${err?.message || "請檢查 API 金鑰"}`);
-      }
-    }
-
-    // 2. Native Web Speech API fallback (if browser supports it)
-    if (typeof window !== "undefined" && window.speechSynthesis) {
-      stopAllAudio();
+    if (isPlayingAudio) {
+      window.speechSynthesis.cancel();
+      setIsPlayingAudio(false);
+      setAudioProgress(0);
+    } else {
+      window.speechSynthesis.cancel();
+      const textToSpeak = guideText || currentArticle?.audioScript || "歡迎收聽台灣深度語音導覽。";
       const utterance = new SpeechSynthesisUtterance(textToSpeak);
 
+      // Prioritize Google Mandarin (Taiwan) or Taiwanese voice
+      const voices = window.speechSynthesis.getVoices();
       if (selectedVoicePack === "英語播報") {
         utterance.lang = "en-US";
+        const enVoice = voices.find(v => v.lang === "en-US" && v.name.toLowerCase().includes("google"))
+          || voices.find(v => v.lang.startsWith("en"));
+        if (enVoice) utterance.voice = enVoice;
         utterance.rate = speechRate * 0.95;
         utterance.pitch = 1.0;
-      } else if (selectedVoicePack === "可愛孩子") {
-        utterance.lang = "zh-TW";
-        utterance.rate = speechRate * 1.1;
-        utterance.pitch = 1.4;
       } else {
         utterance.lang = "zh-TW";
-        utterance.rate = speechRate * 0.95;
-        utterance.pitch = 1.0;
+        const googleZhVoice = 
+          voices.find(v => (v.lang === "zh-TW" || v.lang === "cmn-Hant-TW") && v.name.toLowerCase().includes("google")) ||
+          voices.find(v => v.lang === "zh-TW" || v.lang === "cmn-Hant-TW") ||
+          voices.find(v => v.lang.startsWith("zh") && v.name.toLowerCase().includes("google")) ||
+          voices.find(v => v.lang.startsWith("zh"));
+        if (googleZhVoice) {
+          utterance.voice = googleZhVoice;
+        }
+
+        if (selectedVoicePack === "可愛孩子") {
+          utterance.rate = speechRate * 1.1;
+          utterance.pitch = 1.35;
+        } else {
+          utterance.rate = speechRate * 0.95;
+          utterance.pitch = 1.0;
+        }
       }
 
       utterance.onend = () => {
         setIsPlayingAudio(false);
         setAudioProgress(100);
       };
+
       utterance.onerror = () => {
         setIsPlayingAudio(false);
       };
 
-      const estDurationSec = Math.max(10, Math.round(textToSpeak.length * 0.35 * (1 / speechRate)));
+      // Approximate progress tracking
+      const estDurationSec = Math.max(8, Math.round(textToSpeak.length * 0.32 * (1 / speechRate)));
       let elapsed = 0;
       const interval = setInterval(() => {
         elapsed += 0.5;
@@ -760,44 +776,7 @@ export default function ExploreTab({
 
       window.speechSynthesis.speak(utterance);
       setIsPlayingAudio(true);
-      setAudioEngineUsed("web_speech");
-      setToastMsg("🔊 正在使用內建語音朗讀...");
-      return;
     }
-
-    // 3. Neither is available -> Prompt user to enter OpenAI Key for GPT Voice
-    setShowGptKeyModal(true);
-  };
-
-  // Test OpenAI connection for GPT Voice
-  const handleTestGptKey = async () => {
-    if (!tempGptKey.trim()) {
-      setGptKeyTestResult({ ok: false, msg: "請先輸入 OpenAI API Key" });
-      return;
-    }
-    setIsTestingGptKey(true);
-    setGptKeyTestResult(null);
-    try {
-      const res = await testOpenAIConnection(tempGptKey);
-      if (res.ok) {
-        setGptKeyTestResult({ ok: true, msg: `連線成功！回應時間 ${res.latencyMs}ms，GPT 語音隨時可播報！` });
-      } else {
-        setGptKeyTestResult({ ok: false, msg: `金鑰無效或連線失敗：${res.error}` });
-      }
-    } finally {
-      setIsTestingGptKey(false);
-    }
-  };
-
-  // Save OpenAI key for GPT Voice
-  const handleSaveGptKey = () => {
-    setOpenAIApiKey(tempGptKey.trim());
-    setShowGptKeyModal(false);
-    triggerToast("✅ 已成功儲存 OpenAI API Key，GPT 擬真語音說書已就緒！");
-    // Start audio automatically if user was waiting to listen
-    setTimeout(() => {
-      handleToggleAudio();
-    }, 300);
   };
 
   // Calculate distance for all spots
@@ -809,7 +788,12 @@ export default function ExploreTab({
     return spot;
   });
 
-  // Filter spots by search & region, sorted with closest spots first
+  // Top nearby spots sorted by proximity for the quick guide picker
+  const nearbyRecommendedSpots = [...spotsWithDistance]
+    .sort((a, b) => (a.distanceKm ?? 9999) - (b.distanceKm ?? 9999))
+    .slice(0, 4);
+
+  // Filter spots by search & region
   const filteredSpots = spotsWithDistance
     .filter((spot) => {
       const matchesSearch =
@@ -822,7 +806,12 @@ export default function ExploreTab({
         spot.region === selectedRegion;
       return matchesSearch && matchesRegion;
     })
-    .sort((a, b) => (a.distanceKm ?? 9999) - (b.distanceKm ?? 9999));
+    .sort((a, b) => {
+      if (selectedRegion === "📍 附近景點") {
+        return (a.distanceKm ?? 9999) - (b.distanceKm ?? 9999);
+      }
+      return 0;
+    });
 
   const themesList: Array<{ name: "歷史背景" | "建築特色" | "在地飲食"; icon: string }> = [
     { name: "歷史背景", icon: "🏛️" },
@@ -832,97 +821,141 @@ export default function ExploreTab({
 
   return (
     <div className="space-y-5 fade-in p-1">
-      {/* 1. Unified Compact Location & Context Header */}
-      <div className="bg-[#13294B] text-white p-4 sm:p-5 rounded-2xl shadow-md space-y-3 relative overflow-hidden border border-[#E8A02C]/20">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 relative z-10">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <span className="p-1.5 bg-[#E8A02C] text-[#13294B] rounded-xl text-xs font-black shadow-xs">
-                🇹🇼 走讀隨身聽
-              </span>
-              <h2 className="text-lg sm:text-xl font-bold font-display tracking-tight text-white">
-                台灣深度特色導覽專文庫
-              </h2>
-            </div>
-            <div className="flex items-center gap-2 flex-wrap text-[11px] text-gray-200">
-              <span className="text-gray-300">目前位置：</span>
-              <span className="font-bold text-amber-300 underline decoration-amber-400/50 underline-offset-2">
-                {userCoords.name}
-              </span>
-              {userCoords.source === "gps" && (
-                <span className="text-[10px] bg-emerald-500/25 text-emerald-300 border border-emerald-400/40 px-2 py-0.5 rounded-full font-mono font-bold flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                  <span>🛰️ GPS 鎖定</span>
-                  {userCoords.accuracyDesc && <span className="font-normal">({userCoords.accuracyDesc})</span>}
+      {/* Hero Header */}
+      <div className="bg-[#13294B] text-white p-5 rounded-2xl shadow-md relative overflow-hidden">
+        <div className="absolute top-0 right-0 p-8 opacity-10 font-[serif] text-8xl">台</div>
+        <div className="relative z-10 space-y-1">
+          <span className="bg-[#E8A02C] text-[#13294B] text-xs font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+            全台走讀現場隨身聽
+          </span>
+          <h2 className="text-2xl font-bold font-display tracking-tight mt-1">台灣真實特色導覽專文庫</h2>
+          <p className="text-gray-200 text-xs sm:text-sm max-w-lg leading-relaxed">
+            告別走馬看花！收錄全台22縣市精選文史身世、建築空間構造密碼、常民舌尖尋味與行家現場走讀密技。
+          </p>
+        </div>
+      </div>
+
+      {/* 📍 Nearby Spots Guide Picker Section (預設開啟附近的景點可以挑選導覽) */}
+      <div className="bg-gradient-to-br from-[#13294B] via-[#1B3B60] to-[#13294B] text-white p-4.5 rounded-2xl shadow-md space-y-3.5 border border-[#E8A02C]/25 relative">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2.5">
+            <span className="p-2 bg-[#E8A02C]/20 text-[#E8A02C] rounded-xl text-xl">📍</span>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-extrabold text-sm sm:text-base font-display">
+                  附近熱門景點導覽推薦
+                </h3>
+                <span className="bg-[#E8A02C] text-[#13294B] text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider">
+                  預設推薦
                 </span>
-              )}
-              {userCoords.source === "network" && (
-                <span className="text-[10px] bg-sky-500/25 text-sky-200 border border-sky-400/30 px-2 py-0.5 rounded-full font-mono font-bold flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-pulse"></span>
-                  <span>📶 行動網路 (室內)</span>
+              </div>
+              <p className="text-[11px] text-gray-300 mt-0.5 flex items-center gap-1.5 flex-wrap">
+                <span>目前所在地：</span>
+                <span className="font-bold text-amber-300 underline decoration-amber-400/50 underline-offset-2">
+                  {userCoords.name}
                 </span>
-              )}
-              {userCoords.source === "manual" && (
-                <span className="text-[10px] bg-amber-500/25 text-amber-300 border border-amber-400/30 px-2 py-0.5 rounded-full font-mono">
-                  📍 自選城市
-                </span>
-              )}
+                {userCoords.source === "gps" && (
+                  <span className="text-[9px] bg-emerald-500/25 text-emerald-300 border border-emerald-400/40 px-2 py-0.5 rounded-full font-mono flex items-center gap-1 shadow-sm">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    🛰️ 衛星 GPS 精準（誤差 ±{userCoords.accuracyMeters || 15}m）
+                  </span>
+                )}
+                {userCoords.source === "network" && (
+                  <span className="text-[9px] bg-amber-500/25 text-amber-300 border border-amber-400/40 px-2 py-0.5 rounded-full font-mono flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+                    ⚠️ 電信機房 IP（誤差較大）
+                  </span>
+                )}
+                {userCoords.source === "cache" && (
+                  <span className="text-[9px] bg-white/15 text-gray-200 border border-white/20 px-1.5 py-0.2 rounded font-mono">
+                    ⚡ 記憶位置
+                  </span>
+                )}
+                {userCoords.source === "manual" && (
+                  <span className="text-[9px] bg-indigo-500/25 text-indigo-300 border border-indigo-400/40 px-1.5 py-0.2 rounded font-mono">
+                    📍 手動指定
+                  </span>
+                )}
+              </p>
             </div>
           </div>
 
-          {/* Positioning & GPT Voice Quick Action Buttons */}
+          {/* Action buttons: GPS Primary, Live Watch Tracking, Network Fallback, Manual Picker */}
           <div className="flex items-center gap-1.5 flex-wrap">
+            {/* Primary GPS button */}
             <button
               onClick={handleLocateViaGps}
               disabled={isLocating}
-              className={`text-xs px-2.5 sm:px-3 py-1.5 rounded-xl font-bold flex items-center gap-1 transition-all shadow-xs cursor-pointer ${
-                userCoords.source === "gps"
-                  ? "bg-[#E8A02C] text-[#13294B] ring-2 ring-[#E8A02C]/60 font-black"
-                  : "bg-white/10 hover:bg-white/20 text-amber-300 border border-amber-400/30"
+              className={`text-[11px] px-3 py-1.5 rounded-xl font-black flex items-center gap-1.5 transition-all shadow-md cursor-pointer active:scale-95 ${
+                locatingMethod === "gps"
+                  ? "bg-amber-400 text-[#13294B] animate-pulse"
+                  : "bg-gradient-to-r from-[#E8A02C] to-amber-400 text-[#13294B] hover:brightness-110 border border-amber-300"
               } disabled:opacity-50`}
-              title="適合戶外無遮蔽處，使用手機硬體 GPS 衛星定位"
+              title="使用手機硬體 GPS 衛星晶片，公尺級精準定位（推薦）"
             >
-              <Navigation className={`w-3 h-3 ${locatingMethod === "gps" ? "animate-spin text-current" : "fill-current"}`} />
-              <span>{locatingMethod === "gps" ? "連線衛星..." : "🛰️ GPS (戶外)"}</span>
+              <Navigation className={`w-3.5 h-3.5 ${locatingMethod === "gps" ? "animate-spin" : ""}`} />
+              <span>{locatingMethod === "gps" ? "GPS搜尋衛星中..." : "🛰️ GPS 精準 (推薦)"}</span>
             </button>
 
+            {/* Live GPS Watch Tracking toggle */}
+            <button
+              onClick={handleToggleGpsTracking}
+              className={`text-[10px] px-2.5 py-1.5 rounded-xl font-bold flex items-center gap-1 transition-all border cursor-pointer active:scale-95 ${
+                isGpsTracking
+                  ? "bg-emerald-600 text-white border-emerald-400 shadow-sm"
+                  : "bg-white/10 hover:bg-white/20 text-white border-white/15"
+              }`}
+              title="開啟隨身移動時的即時 GPS 動態追蹤"
+            >
+              <Radio className={`w-3.5 h-3.5 ${isGpsTracking ? "text-emerald-300 animate-pulse" : "text-gray-300"}`} />
+              <span>{isGpsTracking ? "即時追蹤中" : "動態追蹤"}</span>
+            </button>
+
+            {/* Network fallback */}
             <button
               onClick={handleLocateViaMobileNetwork}
               disabled={isLocating}
-              className={`text-xs px-2.5 sm:px-3 py-1.5 rounded-xl font-bold flex items-center gap-1 transition-all shadow-xs cursor-pointer ${
-                userCoords.source === "network"
-                  ? "bg-sky-500 text-white ring-2 ring-sky-400/60 font-black"
-                  : "bg-white/10 hover:bg-white/20 text-sky-200 border border-sky-400/30"
+              className={`text-[10px] px-2 py-1.5 rounded-xl font-medium flex items-center gap-1 transition-all border cursor-pointer active:scale-95 ${
+                locatingMethod === "network"
+                  ? "bg-sky-600 text-white border-sky-400"
+                  : "bg-white/5 hover:bg-white/15 text-gray-300 border-white/10"
               } disabled:opacity-50`}
-              title="適合建築物室內、地下商場（免衛星視線，透過基地台/Wi-Fi定位）"
+              title="使用電信基地台/機房 IP（僅供無GPS時備用，誤差較大）"
             >
-              <Wifi className={`w-3 h-3 ${locatingMethod === "network" ? "animate-spin text-white" : ""}`} />
-              <span>{locatingMethod === "network" ? "基地台定位..." : "📶 網路 (室內)"}</span>
+              <Wifi className={`w-3.5 h-3.5 text-gray-300 ${locatingMethod === "network" ? "animate-spin" : ""}`} />
+              <span>{locatingMethod === "network" ? "網路查詢中..." : "網路備用"}</span>
             </button>
 
+            {/* Manual county switcher */}
             <button
               onClick={() => setShowLocationPicker(!showLocationPicker)}
-              className="text-xs bg-white/10 hover:bg-white/20 text-white px-2.5 py-1.5 rounded-xl font-medium flex items-center gap-1 transition-all border border-white/15 cursor-pointer"
-              title="手動指定全台 22 縣市所在位置"
+              className="text-[10px] bg-white/10 hover:bg-white/20 active:scale-95 text-white px-2.5 py-1.5 rounded-xl font-bold flex items-center gap-1 transition-all border border-white/15 cursor-pointer"
+              title="手動挑選全台 22 縣市所在位置"
             >
-              <MapPin className="w-3 h-3 text-amber-300" />
-              <span>切換縣市</span>
-            </button>
-
-            <button
-              onClick={() => setShowGptKeyModal(true)}
-              className={`text-xs px-2.5 py-1.5 rounded-xl font-bold flex items-center gap-1 transition-all cursor-pointer border ${
-                getOpenAIApiKey()
-                  ? "bg-emerald-600/30 text-emerald-300 border-emerald-400/40 hover:bg-emerald-600/40"
-                  : "bg-amber-500/20 text-amber-300 border-amber-400/40 hover:bg-amber-500/30 animate-pulse"
-              }`}
-              title="設定 OpenAI API Key 啟用 GPT 擬真真人說書語音"
-            >
-              <Mic className="w-3 h-3" />
-              <span>{getOpenAIApiKey() ? "🎙️ GPT 語音已就緒" : "🎙️ 設定 GPT 語音"}</span>
+              <MapPin className="w-3.5 h-3.5 text-amber-300" />
+              <span>切換城市</span>
             </button>
           </div>
         </div>
+
+        {/* Warning hint if currently using inaccurate mobile network IP */}
+        {userCoords.source === "network" && (
+          <div className="px-3 py-2 bg-amber-950/70 border border-amber-500/40 rounded-xl text-[11px] text-amber-200 flex items-center justify-between gap-2 flex-wrap">
+            <div className="flex items-center gap-1.5">
+              <span>⚠️</span>
+              <span>
+                <strong>行動網路提醒：</strong>目前使用電信機房 IP 定位（電信局機房多在都會區，常有數公里至數十公里誤差）。
+              </span>
+            </div>
+            <button
+              onClick={handleLocateViaGps}
+              className="px-2.5 py-1 bg-amber-400 text-[#13294B] rounded-lg font-bold text-[10px] hover:bg-amber-300 cursor-pointer flex items-center gap-1"
+            >
+              <Navigation className="w-3 h-3" />
+              立即切換為 GPS 精準定位
+            </button>
+          </div>
+        )}
 
         {/* Temporary locating status notice message */}
         {locationStatusNotice && (
@@ -934,7 +967,7 @@ export default function ExploreTab({
 
         {/* Location Picker Popover Drawer */}
         {showLocationPicker && (
-          <div className="p-3 bg-black/50 backdrop-blur-md rounded-xl border border-white/20 space-y-2 animate-fadeIn text-xs">
+          <div className="p-3 bg-black/40 backdrop-blur-md rounded-xl border border-white/20 space-y-2.5 animate-fadeIn text-xs">
             <div className="flex justify-between items-center text-gray-200 text-[11px] font-bold">
               <span>📍 選擇您所在的台灣城市（即時計算全台景點距您里程）：</span>
               <button
@@ -944,7 +977,7 @@ export default function ExploreTab({
                 ✕ 關閉
               </button>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 max-h-48 overflow-y-auto pr-1">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-48 overflow-y-auto pr-1">
               {TAIWAN_COUNTIES.map((c) => {
                 const isCur = userCoords.countyName === c.name || userCoords.name.includes(c.name);
                 return (
@@ -982,63 +1015,204 @@ export default function ExploreTab({
             </div>
           </div>
         )}
+
+        {/* 4 Quick Pick Nearby Spot Cards */}
+        <div className="space-y-1.5 pt-1">
+          <div className="text-[11px] text-gray-300 flex items-center justify-between">
+            <span>✨ 距離您最近的景點（點擊直接收聽導覽或閱讀專文）：</span>
+            <span className="text-[10px] text-amber-300/90 font-mono">
+              主題：{selectedTheme}
+            </span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            {nearbyRecommendedSpots.map((spot) => {
+              const distLabel =
+                spot.distanceKm !== undefined
+                  ? spot.distanceKm < 1
+                    ? `距您約 ${Math.round(spot.distanceKm * 1000)} 公尺`
+                    : `距您約 ${spot.distanceKm} 公里`
+                  : "周邊熱門";
+
+              return (
+                <div
+                  key={spot.id}
+                  className="bg-white/10 hover:bg-white/15 border border-white/15 rounded-xl p-3 flex flex-col justify-between transition-all group shadow-xs"
+                >
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xl p-0.5 bg-white/10 rounded-lg">{spot.icon}</span>
+                        <h4 className="font-bold text-sm text-white group-hover:text-[#E8A02C] transition-colors">
+                          {spot.name}
+                        </h4>
+                      </div>
+                      <span className="bg-emerald-400/20 text-emerald-300 border border-emerald-400/30 text-[9px] font-mono font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                        📍 {distLabel}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-gray-300 line-clamp-1 pl-0.5">
+                      {spot.intro}
+                    </p>
+                  </div>
+
+                  {/* Quick Action buttons */}
+                  <div className="flex items-center gap-2 pt-2.5 mt-1.5 border-t border-white/10">
+                    <button
+                      onClick={() => handleOpenGuide(spot, selectedTheme, "audio")}
+                      className="flex-1 bg-[#E8A02C] hover:bg-[#d68f23] text-[#13294B] text-[11px] font-black py-1.5 px-2 rounded-lg flex items-center justify-center gap-1 transition-all shadow-xs cursor-pointer active:scale-95"
+                      title="直接播放景點語音解說"
+                    >
+                      <Headphones className="w-3.5 h-3.5 text-[#13294B]" />
+                      <span>🎙️ 立即導覽</span>
+                    </button>
+                    <button
+                      onClick={() => handleOpenGuide(spot, selectedTheme, "article")}
+                      className="flex-1 bg-white/15 hover:bg-white/25 text-white text-[11px] font-bold py-1.5 px-2 rounded-lg flex items-center justify-center gap-1 transition-all border border-white/15 cursor-pointer active:scale-95"
+                      title="閱讀深度文史與空間解說"
+                    >
+                      <BookOpen className="w-3.5 h-3.5 text-amber-200" />
+                      <span>📖 深度故事</span>
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
       </div>
 
-      {/* 2. Top Search & Filter Bar */}
-      <div className="space-y-2.5">
-        <div className="relative">
-          <Search className="absolute left-3.5 top-3.5 text-gray-400 w-4 h-4" />
-          <input
-            type="text"
-            className="w-full bg-white border border-gray-200 rounded-xl py-2.5 pl-10 pr-4 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-[#13294B] shadow-xs transition-all"
-            placeholder="搜尋全台景點、歷史背景、建築美學或在地小吃..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
+      {/* 📌 Pinned Active Top Featured Article Card (特色專文置頂最上方) */}
+      {activeSpot && currentArticle && (
+        <div className="bg-gradient-to-r from-amber-50 via-white to-orange-50 border-2 border-[#13294B] rounded-2xl p-4 shadow-md space-y-3 animate-slide-down">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <span className="text-3xl p-1 bg-white rounded-xl shadow-xs border border-amber-200">{activeSpot.icon}</span>
+              <div>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="bg-[#13294B] text-white text-[10px] font-black px-2 py-0.5 rounded-full">
+                    📌 置頂特色專文
+                  </span>
+                  <h3 className="font-extrabold text-base text-gray-900 font-display">
+                    {activeSpot.name}
+                  </h3>
+                </div>
+                <p className="text-xs text-gray-600 font-medium mt-0.5">
+                  【{selectedTheme}】{currentArticle.articleTitle}
+                </p>
+              </div>
+            </div>
+
+            <button
+              onClick={() => {
+                setActiveSpot(null);
+                setCurrentArticle(null);
+                if (isPlayingAudio) handleToggleAudio();
+              }}
+              className="text-gray-400 hover:text-gray-600 p-1 rounded-lg cursor-pointer"
+              title="關閉置頂專文"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          <p className="text-xs text-gray-700 bg-white/80 p-2.5 rounded-xl border border-amber-100 leading-relaxed font-sans line-clamp-2">
+            {currentArticle.summary}
+          </p>
+
+          <div className="flex items-center gap-2 pt-1 flex-wrap">
+            <button
+              onClick={handleToggleAudio}
+              className="flex-1 py-2 px-3 bg-[#E8A02C] hover:bg-amber-500 text-[#13294B] rounded-xl text-xs font-black flex items-center justify-center gap-1.5 shadow-xs cursor-pointer transition-all active:scale-95"
+              title="預設直接以 Google 國語語音播放原創專文說書手稿"
+            >
+              {isPlayingAudio ? <Pause className="w-3.5 h-3.5 fill-[#13294B]" /> : <Play className="w-3.5 h-3.5 fill-[#13294B]" />}
+              <span>{isPlayingAudio ? "暫停語音" : "🎙️ Google 語音說書"}</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTabMode("article")}
+              className="flex-1 py-2 px-3 bg-[#13294B] hover:bg-[#1E3E62] text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs cursor-pointer transition-all active:scale-95"
+              title="展開閱讀完整文史手稿與走讀密技"
+            >
+              <BookOpen className="w-3.5 h-3.5 text-[#E8A02C]" />
+              <span>展開全文閱讀</span>
+            </button>
+
+            <button
+              onClick={() => {
+                setActiveTabMode("audio");
+                handleCustomizeWithAi();
+              }}
+              className="py-2 px-3 bg-purple-700 hover:bg-purple-800 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs cursor-pointer transition-all active:scale-95"
+              title="呼叫 GPT API 客製化專屬說書詞"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+              <span>呼叫 GPT 客製</span>
+            </button>
+          </div>
         </div>
+      )}
 
-        {/* Region & Theme Pills (Compact 2-row layout) */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-          {/* Region Pills */}
-          <div className="flex gap-1 overflow-x-auto pb-0.5 no-scrollbar">
-            {REGIONS_LIST.map((reg) => {
-              const isSelected = selectedRegion === reg;
-              return (
-                <button
-                  key={reg}
-                  onClick={() => setSelectedRegion(reg)}
-                  className={`py-1.5 px-2.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all border cursor-pointer ${
-                    isSelected
-                      ? "bg-[#13294B] text-white border-[#13294B] shadow-xs"
-                      : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
-                  }`}
-                >
-                  {reg}
-                </button>
-              );
-            })}
-          </div>
+      {/* Top Search bar */}
+      <div className="relative">
+        <Search className="absolute left-3.5 top-3.5 text-gray-400 w-5 h-5" />
+        <input
+          type="text"
+          className="w-full bg-white border border-gray-200 rounded-xl py-3 pl-11 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-[#13294B] shadow-xs transition-all"
+          placeholder="搜尋全台景點或縣市，例如：大稻埕、安平古堡、日月潭、太魯閣、鹿港..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+        />
+      </div>
 
-          {/* Theme Pills */}
-          <div className="flex gap-1.5 flex-shrink-0">
-            {themesList.map((theme) => {
-              const isSelected = selectedTheme === theme.name;
-              return (
-                <button
-                  key={theme.name}
-                  onClick={() => setSelectedTheme(theme.name)}
-                  className={`py-1.5 px-2.5 rounded-xl text-xs font-semibold flex items-center gap-1 transition-all border cursor-pointer ${
-                    isSelected
-                      ? "bg-[#E8A02C] text-[#13294B] border-[#E8A02C] font-black shadow-xs"
-                      : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
-                  }`}
-                >
-                  <span>{theme.icon}</span>
-                  <span>{theme.name}</span>
-                </button>
-              );
-            })}
-          </div>
+      {/* Region Selector Pills */}
+      <div className="space-y-1.5">
+        <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider block">
+          地理分區快速篩選
+        </label>
+        <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+          {REGIONS_LIST.map((reg) => {
+            const isSelected = selectedRegion === reg;
+            return (
+              <button
+                key={reg}
+                onClick={() => setSelectedRegion(reg)}
+                className={`py-1.5 px-3 rounded-xl text-xs font-bold whitespace-nowrap transition-all border cursor-pointer ${
+                  isSelected
+                    ? "bg-[#13294B] text-white border-[#13294B] shadow-xs"
+                    : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
+                }`}
+              >
+                {reg}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Theme selector */}
+      <div className="space-y-2">
+        <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider block">
+          預設導覽主題方向
+        </label>
+        <div className="grid grid-cols-3 gap-2">
+          {themesList.map((theme) => {
+            const isSelected = selectedTheme === theme.name;
+            return (
+              <button
+                key={theme.name}
+                onClick={() => setSelectedTheme(theme.name)}
+                className={`py-2 px-3 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 transition-all border cursor-pointer ${
+                  isSelected
+                    ? "bg-[#13294B] text-white border-[#13294B] shadow-xs font-semibold"
+                    : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
+                }`}
+              >
+                <span>{theme.icon}</span>
+                <span>{theme.name}</span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -1059,7 +1233,7 @@ export default function ExploreTab({
             找不到符合的台灣探索景點，請嘗試更換搜尋關鍵字或分區。
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 gap-4">
             {filteredSpots.map((spot) => {
               const unlockedList = unlockedStories[spot.name] || [];
               const isVisited = visitedSpots.includes(spot.name);
@@ -1117,15 +1291,12 @@ export default function ExploreTab({
                       <span>閱讀【{selectedTheme}】專文</span>
                     </button>
                     <button
-                      onClick={() => {
-                        handleOpenGuide(spot, selectedTheme, "audio");
-                        setTimeout(() => handleToggleAudio(), 250);
-                      }}
-                      className="bg-[#E8A02C] hover:bg-[#d9901d] text-[#13294B] text-xs font-black py-2.5 px-3.5 rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-xs cursor-pointer active:scale-95"
-                      title="直接播放 GPT 擬真語音說書"
+                      onClick={() => handleOpenGuide(spot, selectedTheme, "audio")}
+                      className="bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold py-2.5 px-3.5 rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-xs cursor-pointer"
+                      title="快速聆聽此景點語音說書詞"
                     >
-                      <Mic className="w-3.5 h-3.5 text-[#13294B]" />
-                      <span>🎙️ 聽 GPT 說書</span>
+                      <Headphones className="w-3.5 h-3.5 text-white" />
+                      <span>🎧 聽說書詞</span>
                     </button>
                     {onAddSpotToItinerary && (
                       <button
@@ -1152,10 +1323,10 @@ export default function ExploreTab({
         )}
       </div>
 
-      {/* FULL FEATURE ARTICLE READER / AUDIO DRAWER */}
+      {/* FULL FEATURE ARTICLE READER / AUDIO DRAWER (DOCKED AT TOP) */}
       {activeSpot && currentArticle && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-end justify-center p-0 sm:p-4">
-          <div className="bg-white w-full max-w-2xl rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden animate-slide-up max-h-[92vh] flex flex-col border border-gray-100">
+        <div className="fixed inset-0 bg-black/65 backdrop-blur-xs z-50 flex items-start justify-center p-2 sm:p-4 overflow-y-auto">
+          <div className="bg-white w-full max-w-2xl rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden animate-slide-down max-h-[92vh] flex flex-col border border-gray-100 mt-1 sm:mt-4 mb-6">
             {/* Modal Header */}
             <div className="bg-[#13294B] text-white p-4.5 flex justify-between items-center select-none flex-shrink-0">
               <div className="flex items-center gap-3">
@@ -1258,21 +1429,8 @@ export default function ExploreTab({
             {/* Modal Scrollable Body */}
             <div className="p-5 space-y-5 overflow-y-auto flex-1 bg-[#FAF8F5]">
               {/* TAB 1: AUTHENTIC DEEP ARTICLE */}
-               {activeTabMode === "article" && (
+              {activeTabMode === "article" && (
                 <div className="space-y-4">
-                  {/* Section 1: 文史身世與時代背景 (Placed directly at the very top) */}
-                  <div className="bg-white p-4.5 rounded-2xl border border-gray-100 shadow-xs space-y-2">
-                    <div className="flex items-center gap-2 border-b border-gray-100 pb-2">
-                      <span className="text-base">🏛️</span>
-                      <h4 className="font-bold text-sm text-gray-900 font-display">
-                        風土身世與歷史脈絡
-                      </h4>
-                    </div>
-                    <div className="text-xs text-gray-700 leading-relaxed whitespace-pre-wrap font-sans space-y-2">
-                      {currentArticle.historyContext}
-                    </div>
-                  </div>
-
                   {/* Article Title Banner */}
                   <div className="bg-white p-4.5 rounded-2xl border border-amber-200/60 shadow-xs space-y-2">
                     <span className="text-[10px] bg-amber-100 text-amber-900 font-bold px-2 py-0.5 rounded-full uppercase tracking-wider inline-block">
@@ -1292,7 +1450,7 @@ export default function ExploreTab({
                       <span className="p-2 bg-[#E8A02C] text-white rounded-xl text-lg shadow-xs">🎧</span>
                       <div>
                         <span className="text-xs font-bold text-gray-900 block font-display">現場走讀想用聽的？</span>
-                        <span className="text-[11px] text-gray-600">隨身聽原聲解說，或由 Gemini 為您客製專屬風格說書詞</span>
+                        <span className="text-[11px] text-gray-600">預設 Google 語音即開即播，或呼叫 GPT 產生客製化說書詞</span>
                       </div>
                     </div>
                     <div className="flex items-center gap-2 w-full sm:w-auto">
@@ -1304,19 +1462,35 @@ export default function ExploreTab({
                           }
                         }}
                         className="flex-1 sm:flex-initial py-2 px-3.5 bg-[#13294B] hover:bg-[#1E3E62] text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
+                        title="預設直接使用 Google 國語語音朗讀精選原創手稿（免等待、免消耗額度）"
                       >
                         <Play className="w-3.5 h-3.5 fill-white" />
-                        <span>聆聽說書</span>
+                        <span>Google 語音播報</span>
                       </button>
                       <button
                         onClick={() => {
+                          setActiveTabMode("audio");
                           handleCustomizeWithAi();
                         }}
-                        className="flex-1 sm:flex-initial py-2 px-3.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:opacity-90 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
+                        className="flex-1 sm:flex-initial py-2 px-3.5 bg-gradient-to-r from-purple-700 to-indigo-800 hover:opacity-90 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
+                        title="呼叫 GPT API 產生客製化風格說書詞"
                       >
-                        <Sparkles className="w-3.5 h-3.5 text-white" />
-                        <span>一鍵產生說書詞</span>
+                        <Sparkles className="w-3.5 h-3.5 text-[#E8A02C]" />
+                        <span>呼叫 GPT 客製</span>
                       </button>
+                    </div>
+                  </div>
+
+                  {/* Section 1: 文史身世與時代背景 */}
+                  <div className="bg-white p-4.5 rounded-2xl border border-gray-100 shadow-xs space-y-2">
+                    <div className="flex items-center gap-2 border-b border-gray-100 pb-2">
+                      <span className="text-base">🏛️</span>
+                      <h4 className="font-bold text-sm text-gray-900 font-display">
+                        風土身世與歷史脈絡
+                      </h4>
+                    </div>
+                    <div className="text-xs text-gray-700 leading-relaxed whitespace-pre-wrap font-sans space-y-2">
+                      {currentArticle.historyContext}
                     </div>
                   </div>
 
@@ -1370,77 +1544,56 @@ export default function ExploreTab({
                     </div>
                   )}
 
-                  {/* Audio Player Card with GPT Voice Engine */}
+                  {/* Audio Player Card */}
                   <div className="bg-white border border-gray-200/80 rounded-2xl p-4.5 space-y-4 shadow-xs">
-                    <div className="flex items-center justify-between flex-wrap gap-3">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
                       <div className="flex items-center gap-3">
                         <button
-                          onClick={() => handleToggleAudio()}
-                          disabled={isLoadingAudio}
-                          className="w-12 h-12 bg-[#E8A02C] hover:bg-amber-500 text-white rounded-full flex items-center justify-center transition-all shadow-md active:scale-95 cursor-pointer disabled:opacity-50"
+                          onClick={handleToggleAudio}
+                          className="w-12 h-12 bg-[#E8A02C] hover:bg-amber-500 text-white rounded-full flex items-center justify-center transition-all shadow-md active:scale-95 cursor-pointer"
                         >
-                          {isLoadingAudio ? (
-                            <RefreshCw className="w-5 h-5 text-white animate-spin" />
-                          ) : isPlayingAudio ? (
+                          {isPlayingAudio ? (
                             <Pause className="w-5 h-5 fill-white" />
                           ) : (
                             <Play className="w-5 h-5 fill-white ml-0.5" />
                           )}
                         </button>
                         <div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-1.5 flex-wrap">
                             <span className="text-sm font-bold text-gray-900 block font-display">
-                              {isLoadingAudio
-                                ? "正在呼叫 GPT 擬真語音..."
-                                : isPlayingAudio
-                                ? "正在播報導覽說書..."
-                                : "點擊播放語音說書"}
+                              {isPlayingAudio ? "正在播報導覽說書..." : "點擊播放語音導覽"}
                             </span>
-                            {audioEngineUsed === "gpt" && (
-                              <span className="bg-emerald-100 text-emerald-800 text-[9px] font-black px-1.5 py-0.2 rounded-full border border-emerald-300">
-                                🎙️ GPT 擬真音質
+                            {!isAiCustomized ? (
+                              <span className="text-[9px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full border border-emerald-200">
+                                🎙️ Google 國語語音 (預設)
+                              </span>
+                            ) : (
+                              <span className="text-[9px] bg-purple-100 text-purple-800 font-bold px-2 py-0.5 rounded-full border border-purple-200">
+                                🤖 {usedAiModel || "GPT-4o 客製版"}
                               </span>
                             )}
                           </div>
-                          <span className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
-                            聲線：<strong>{selectedGptVoice.toUpperCase()}</strong> • 語速：{speechRate}x
+                          <span className="text-xs text-gray-400 mt-0.5 block">
+                            語音包：{selectedVoicePack} • 語速：{speechRate}x
                           </span>
                         </div>
                       </div>
 
-                      {/* Right side voice settings button & speed controls */}
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => setShowGptKeyModal(true)}
-                          className="text-[10px] bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 px-2 py-1 rounded-lg font-bold flex items-center gap-1 cursor-pointer transition-all"
-                          title="切換 GPT 聲線或設定 API Key"
-                        >
-                          <Sliders className="w-3 h-3 text-amber-700" />
-                          <span>聲線/設定</span>
-                        </button>
-
-                        {/* Speed control */}
-                        <div className="flex gap-1">
-                          {[0.8, 1.0, 1.25].map((rate) => (
-                            <button
-                              key={rate}
-                              onClick={() => {
-                                setSpeechRate(rate);
-                                if (isPlayingAudio) {
-                                  stopAllAudio();
-                                  setTimeout(() => handleToggleAudio(), 200);
-                                }
-                              }}
-                              className={`text-[10px] px-2 py-1 rounded-lg font-bold border transition-all cursor-pointer ${
-                                speechRate === rate
-                                  ? "bg-[#13294B] text-white border-[#13294B]"
-                                  : "bg-gray-50 text-gray-600 border-gray-200 hover:bg-white"
-                              }`}
-                            >
-                              {rate}x
-                            </button>
-                          ))}
-                        </div>
+                      {/* Speed control */}
+                      <div className="flex gap-1">
+                        {[0.8, 1.0, 1.25].map((rate) => (
+                          <button
+                            key={rate}
+                            onClick={() => setSpeechRate(rate)}
+                            className={`text-[10px] px-2 py-1 rounded-lg font-bold border transition-all cursor-pointer ${
+                              speechRate === rate
+                                ? "bg-[#13294B] text-white border-[#13294B]"
+                                : "bg-gray-50 text-gray-600 border-gray-200 hover:bg-white"
+                            }`}
+                          >
+                            {rate}x
+                          </button>
+                        ))}
                       </div>
                     </div>
 
@@ -1454,13 +1607,7 @@ export default function ExploreTab({
                       </div>
                       <div className="flex justify-between text-[10px] text-gray-400 font-mono">
                         <span>進度 {audioProgress}%</span>
-                        <span>
-                          {audioEngineUsed === "gpt"
-                            ? "🎙️ OpenAI 擬真語音說書"
-                            : isAiCustomized
-                            ? `✨ Gemini 專屬版 (${usedAiModel || "gemini-3.8-flash"})`
-                            : "📖 典藏文史解說"}
-                        </span>
+                        <span>{isAiCustomized ? `✨ ${usedAiModel || "GPT 客製專屬版"}` : "📖 預設原創深度解說手稿"}</span>
                       </div>
                     </div>
 
@@ -1470,18 +1617,30 @@ export default function ExploreTab({
                     </div>
 
                     {/* Action buttons below spoken text */}
-                    <div className="flex items-center justify-between gap-2 pt-1 border-t border-gray-100">
-                      <button
-                        onClick={() => {
-                          if (navigator.clipboard) {
-                            navigator.clipboard.writeText(guideText || "");
-                            triggerToast("已複製說書詞至剪貼簿！");
-                          }
-                        }}
-                        className="text-[11px] text-gray-500 hover:text-gray-800 font-semibold flex items-center gap-1 cursor-pointer"
-                      >
-                        <span>📋</span> 複製說書文字
-                      </button>
+                    <div className="flex items-center justify-between gap-2 pt-1 border-t border-gray-100 flex-wrap">
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => {
+                            if (navigator.clipboard) {
+                              navigator.clipboard.writeText(guideText || "");
+                              alert("已複製說書詞至剪貼簿！");
+                            }
+                          }}
+                          className="text-[11px] text-gray-500 hover:text-gray-800 font-semibold flex items-center gap-1 cursor-pointer"
+                        >
+                          <span>📋</span> 複製文字
+                        </button>
+                        {isAiCustomized && (
+                          <button
+                            onClick={handleResetToDefaultVoiceStory}
+                            className="text-[11px] text-amber-600 hover:text-amber-800 font-semibold flex items-center gap-1 cursor-pointer"
+                            title="還原為原汁原味的預設手稿"
+                          >
+                            <span>🔄</span> 恢復預設手稿
+                          </button>
+                        )}
+                      </div>
+
                       <button
                         onClick={handleToggleAudio}
                         className="text-[11px] text-[#13294B] hover:text-[#E8A02C] font-bold flex items-center gap-1 cursor-pointer"
@@ -1489,12 +1648,12 @@ export default function ExploreTab({
                         {isPlayingAudio ? (
                           <>
                             <Pause className="w-3.5 h-3.5 text-[#E8A02C]" />
-                            <span>暫停語音朗讀</span>
+                            <span>暫停 Google 語音朗讀</span>
                           </>
                         ) : (
                           <>
                             <Play className="w-3.5 h-3.5 text-[#13294B]" />
-                            <span>語音朗讀這段話</span>
+                            <span>{isAiCustomized ? "Google 語音朗讀客製詞" : "Google 語音即時播放"}</span>
                           </>
                         )}
                       </button>
@@ -1502,11 +1661,14 @@ export default function ExploreTab({
                   </div>
 
                   {/* AI Customizer Panel */}
-                  <div className="bg-white border border-gray-200/80 rounded-2xl p-4 space-y-3 shadow-xs">
+                  <div className="bg-white border border-purple-200/80 rounded-2xl p-4 space-y-3 shadow-xs">
                     <div className="flex items-center justify-between border-b border-gray-100 pb-2">
                       <span className="text-xs font-bold text-[#13294B] flex items-center gap-1.5">
-                        <Sparkles className="w-3.5 h-3.5 text-[#E8A02C]" />
-                        Gemini 智慧現場說書客製（可選腔調與長度）
+                        <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+                        想要特殊口吻？呼叫 GPT API 客製專屬說書詞
+                      </span>
+                      <span className="text-[10px] bg-purple-100 text-purple-800 font-mono font-bold px-2 py-0.5 rounded-full border border-purple-200">
+                        OpenAI GPT
                       </span>
                     </div>
 
@@ -1573,17 +1735,17 @@ export default function ExploreTab({
                     <button
                       onClick={handleCustomizeWithAi}
                       disabled={isLoadingAi}
-                      className="w-full mt-2 py-2.5 px-4 bg-gradient-to-r from-[#13294B] to-[#1E3E62] hover:opacity-95 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-xs cursor-pointer disabled:opacity-50"
+                      className="w-full mt-2 py-2.5 px-4 bg-gradient-to-r from-purple-700 to-[#13294B] hover:opacity-95 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm cursor-pointer disabled:opacity-50"
                     >
                       {isLoadingAi ? (
                         <>
                           <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                          <span>連線 Gemini 即時量身客製中...</span>
+                          <span>連線 OpenAI GPT API 客製產生中...</span>
                         </>
                       ) : (
                         <>
                           <Sparkles className="w-3.5 h-3.5 text-[#E8A02C]" />
-                          <span>一鍵由 Gemini 產生【{selectedGuideLength}/{selectedExpressStyle}/{selectedVoicePack}】說書詞</span>
+                          <span>🤖 呼叫 GPT 產生【{selectedGuideLength}/{selectedExpressStyle}/{selectedVoicePack}】客製說書詞</span>
                         </>
                       )}
                     </button>
@@ -1645,156 +1807,13 @@ export default function ExploreTab({
                       highlight: activeSpot.intro.slice(0, 25) + "...",
                       theme: selectedTheme
                     });
-                    triggerToast(`已將「${activeSpot.name}」加入您的行程！`);
+                    alert(`已將「${activeSpot.name}」加入您的行程！`);
                   }}
                   className="py-2 px-4 bg-[#13294B] hover:bg-[#1E3E62] text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ml-auto"
                 >
                   <span>➕ 排入我的行程</span>
                 </button>
               )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Floating Toast Notification */}
-      {toastMsg && (
-        <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50 bg-[#13294B] text-white px-4 py-2.5 rounded-full shadow-2xl flex items-center gap-2 border border-emerald-400/40 animate-fade-in text-xs font-semibold">
-          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-          <span>{toastMsg}</span>
-        </div>
-      )}
-
-      {/* GPT Voice & OpenAI Key Setup Modal */}
-      {showGptKeyModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in">
-          <div className="bg-white rounded-3xl max-w-md w-full shadow-2xl border border-gray-150 overflow-hidden flex flex-col max-h-[90vh]">
-            {/* Header */}
-            <div className="bg-[#13294B] text-white p-4.5 flex justify-between items-center">
-              <div className="flex items-center gap-2.5">
-                <span className="p-2 bg-[#E8A02C] text-[#13294B] rounded-xl text-lg font-bold">🎙️</span>
-                <div>
-                  <h3 className="font-bold text-sm font-display leading-tight">GPT 擬真語音說書設定</h3>
-                  <p className="text-[10px] text-gray-300">支援 Android 原生音訊串流，解決 Web Speech 限制</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setShowGptKeyModal(false)}
-                className="text-gray-300 hover:text-white p-1 rounded-full hover:bg-white/10 transition-all cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Body */}
-            <div className="p-5 space-y-4 overflow-y-auto text-xs text-gray-700">
-              <div className="p-3.5 bg-amber-50 rounded-2xl border border-amber-200/80 space-y-1.5 text-amber-900">
-                <span className="font-bold text-xs flex items-center gap-1.5">
-                  <span>💡</span> 為什麼需要呼叫 GPT 語音？
-                </span>
-                <p className="text-[11px] leading-relaxed text-amber-800">
-                  許多 Android 手機及 APK 容器內並未安裝中文語音包，導致 Web Speech API 無法發聲。
-                  呼叫 OpenAI TTS 擬真語音會直接串流高品質 MP3 真人聲線，<strong>在所有手機及任何瀏覽器上 100% 順暢播放</strong>！
-                </p>
-              </div>
-
-              {/* API Key Input */}
-              <div className="space-y-1.5">
-                <label className="font-bold text-gray-800 text-xs block">
-                  OpenAI API Key
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="password"
-                    value={tempGptKey}
-                    onChange={(e) => {
-                      setTempGptKey(e.target.value);
-                      setGptKeyTestResult(null);
-                    }}
-                    placeholder="sk-proj-... 或 sk-..."
-                    className="flex-1 px-3 py-2 border border-gray-200 rounded-xl text-xs font-mono focus:outline-none focus:ring-2 focus:ring-[#13294B]"
-                  />
-                  <button
-                    onClick={handleTestGptKey}
-                    disabled={isTestingGptKey}
-                    className="px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold transition-all text-xs flex items-center gap-1 cursor-pointer disabled:opacity-50"
-                  >
-                    <RefreshCw className={`w-3.5 h-3.5 ${isTestingGptKey ? "animate-spin" : ""}`} />
-                    <span>測試</span>
-                  </button>
-                </div>
-                <p className="text-[10px] text-gray-400">
-                  金鑰僅儲存於您手機的本地 LocalStorage，絕不上傳第三方。
-                </p>
-              </div>
-
-              {/* Test result feedback banner */}
-              {gptKeyTestResult && (
-                <div
-                  className={`p-3 rounded-xl border text-xs font-medium flex items-center gap-2 ${
-                    gptKeyTestResult.ok
-                      ? "bg-emerald-50 text-emerald-800 border-emerald-200"
-                      : "bg-red-50 text-red-800 border-red-200"
-                  }`}
-                >
-                  <span>{gptKeyTestResult.ok ? "✅" : "⚠️"}</span>
-                  <span className="flex-1">{gptKeyTestResult.msg}</span>
-                </div>
-              )}
-
-              {/* Voice Personas selection */}
-              <div className="space-y-2">
-                <label className="font-bold text-gray-800 text-xs block">
-                  選擇 GPT 說書擬真聲線
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  {[
-                    { id: "nova", name: "Nova", desc: "溫暖知性女主播 (推薦)", icon: "👩‍💼" },
-                    { id: "shimmer", name: "Shimmer", desc: "清亮溫柔女聲", icon: "🌸" },
-                    { id: "onyx", name: "Onyx", desc: "雄厚沉穩男聲 (文史感)", icon: "🎙️" },
-                    { id: "alloy", name: "Alloy", desc: "端莊典雅中性音", icon: "🏛️" },
-                    { id: "echo", name: "Echo", desc: "清朗陽光男聲", icon: "🧭" },
-                  ].map((v) => {
-                    const isSelected = selectedGptVoice === v.id;
-                    return (
-                      <button
-                        key={v.id}
-                        onClick={() => setSelectedGptVoice(v.id as any)}
-                        className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
-                          isSelected
-                            ? "bg-[#13294B] text-white border-[#13294B] shadow-xs"
-                            : "bg-gray-50 hover:bg-gray-100 text-gray-700 border-gray-200"
-                        }`}
-                      >
-                        <div className="flex items-center gap-1.5 font-bold text-xs">
-                          <span>{v.icon}</span>
-                          <span>{v.name}</span>
-                        </div>
-                        <p className={`text-[10px] mt-0.5 ${isSelected ? "text-amber-200" : "text-gray-400"}`}>
-                          {v.desc}
-                        </p>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-
-            {/* Footer */}
-            <div className="p-3.5 bg-gray-50 border-t border-gray-150 flex justify-between items-center">
-              <button
-                onClick={() => setShowGptKeyModal(false)}
-                className="py-2 px-3 text-gray-500 hover:text-gray-800 text-xs font-semibold cursor-pointer"
-              >
-                取消
-              </button>
-              <button
-                onClick={handleSaveGptKey}
-                className="py-2 px-4 bg-[#13294B] hover:bg-[#1E3E62] text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
-              >
-                <Check className="w-4 h-4 text-emerald-400" />
-                <span>儲存並啟用 GPT 語音</span>
-              </button>
             </div>
           </div>
         </div>

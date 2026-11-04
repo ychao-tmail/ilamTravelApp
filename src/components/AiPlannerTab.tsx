@@ -761,17 +761,34 @@ export default function AiPlannerTab({
                 {itineraryResult.map((day) => (
                   <div key={day.dayNum} className="space-y-2 border-l-2 border-dashed border-gray-200 pl-4 py-1 relative">
                     <div className="absolute -left-1.5 top-2.5 w-3 h-3 rounded-full bg-[#13294B]"></div>
-                    <h3 className="text-xs font-extrabold text-[#13294B] font-display">
-                      第 {day.dayNum} 天行程
-                    </h3>
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-xs font-extrabold text-[#13294B] font-display">
+                        第 {day.dayNum} 天行程 {day.areaFocus ? `• ${day.areaFocus}` : ""}
+                      </h3>
+                      {day.dayTotalDistanceKm !== undefined && day.dayTotalDistanceKm > 0 && (
+                        <span className="text-[9px] font-mono font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-md">
+                          🚗 約 {day.dayTotalDistanceKm} km
+                        </span>
+                      )}
+                    </div>
 
-                    <div className="flex flex-wrap gap-1.5 py-1">
+                    <div className="flex flex-col gap-1.5 py-1">
                       {day.lodging && (
                         <div className="text-[10px] text-blue-800 bg-[#EDF4FF] rounded-lg px-2.5 py-1.5 font-medium leading-relaxed border border-blue-100">
-                          🏡 <strong>今日住宿：</strong>{day.lodging}
+                          🏡 <strong>住宿推薦：</strong>{day.lodging}
                         </div>
                       )}
-                      {day.foodRecommend && (
+                      {day.lunch && (
+                        <div className="text-[10px] text-amber-900 bg-amber-50/80 rounded-lg px-2.5 py-1.5 font-medium leading-relaxed border border-amber-200/70">
+                          🥢 <strong>在地午餐：</strong>{day.lunch.name} — {day.lunch.dish} ({day.lunch.cost})
+                        </div>
+                      )}
+                      {day.dinner && (
+                        <div className="text-[10px] text-indigo-900 bg-indigo-50/70 rounded-lg px-2.5 py-1.5 font-medium leading-relaxed border border-indigo-150">
+                          🏮 <strong>晚餐/夜市：</strong>{day.dinner.name} — {day.dinner.dish} ({day.dinner.cost})
+                        </div>
+                      )}
+                      {!day.lunch && !day.dinner && day.foodRecommend && (
                         <div className="text-[10px] text-amber-800 bg-amber-50/70 rounded-lg px-2.5 py-1.5 font-medium leading-relaxed border border-amber-100">
                           🍽️ <strong>美食推薦：</strong>{day.foodRecommend}
                         </div>
