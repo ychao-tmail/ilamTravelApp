@@ -94,7 +94,15 @@ export async function speakUtterance(options: SpeakOptions): Promise<{ engineUse
   await stopUtterance();
 
   // Language mapping
-  const lang = voicePack === "英語播報" ? "en-US" : "zh-TW";
+  let lang = options.lang || "zh-TW";
+  if (voicePack === "英語播報" || lang.startsWith("en")) {
+    lang = "en-US";
+  } else if (voicePack === "日本語" || lang.startsWith("ja")) {
+    lang = "ja-JP";
+  } else if (!options.lang) {
+    lang = "zh-TW";
+  }
+
   const effectiveRate = voicePack === "可愛孩子" ? rate * 1.1 : rate * 0.95;
   const effectivePitch = voicePack === "可愛孩子" ? Math.min(1.5, pitch * 1.3) : pitch;
 
@@ -126,6 +134,23 @@ export async function speakUtterance(options: SpeakOptions): Promise<{ engineUse
       utterance.lang = lang;
       utterance.rate = effectiveRate;
       utterance.pitch = effectivePitch;
+
+      // Select voice matching language if available
+      const voices = window.speechSynthesis.getVoices();
+      if (voices && voices.length > 0) {
+        if (lang.startsWith("ja")) {
+          const jaVoice = voices.find(v => v.lang.startsWith("ja"));
+          if (jaVoice) utterance.voice = jaVoice;
+        } else if (lang.startsWith("en")) {
+          const enVoice = voices.find(v => v.lang.startsWith("en") && v.name.toLowerCase().includes("google")) ||
+                          voices.find(v => v.lang.startsWith("en"));
+          if (enVoice) utterance.voice = enVoice;
+        } else {
+          const zhVoice = voices.find(v => (v.lang === "zh-TW" || v.lang === "cmn-Hant-TW") && v.name.toLowerCase().includes("google")) ||
+                          voices.find(v => v.lang.startsWith("zh"));
+          if (zhVoice) utterance.voice = zhVoice;
+        }
+      }
 
       utterance.onstart = () => {
         if (onStart) onStart();

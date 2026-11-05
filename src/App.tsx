@@ -22,6 +22,7 @@ import {
   stopUtterance, 
   TtsEngineStatus 
 } from "./services/nativeTtsService";
+import { useTranslation } from "./i18n/LanguageContext";
 
 // Flagship default itinerary covering Taiwan nationwide
 const DEFAULT_ITINERARY: DayItinerary[] = [
@@ -56,6 +57,7 @@ const DEFAULT_ITINERARY: DayItinerary[] = [
 ];
 
 export default function App() {
+  const { currentLang, setLanguage, t } = useTranslation();
   const [activeTab, setActiveTab] = useState<string>("explore"); // explore, planner, itinerary, record
   
   // Saved itinerary files
@@ -576,40 +578,84 @@ export default function App() {
       <div className="w-full max-w-md bg-[#FAF8F5] md:rounded-3xl shadow-xl min-h-screen md:min-h-[820px] flex flex-col justify-between border border-gray-150 relative overflow-hidden">
         
         {/* Top Header navbar with Yilan styling elements */}
-        <header className="bg-[#13294B] text-white px-5 py-3.5 flex justify-between items-center border-b border-[#13294B] relative shadow-xs">
+        <header className="bg-[#13294B] text-white px-3.5 py-3 flex justify-between items-center border-b border-[#13294B] relative shadow-xs">
           <div className="flex items-center gap-2">
             <img 
               src="/favicon.png" 
               alt="AI深旅 App Icon" 
-              className="w-8 h-8 rounded-lg object-cover shadow-sm border border-[#E8A02C]/50 flex-shrink-0" 
+              className="w-7 h-7 rounded-lg object-cover shadow-sm border border-[#E8A02C]/50 flex-shrink-0" 
             />
             <div>
               <div className="flex items-center gap-1.5">
-                <h1 className="text-sm font-black tracking-tight font-display">AI深旅 DeepGo</h1>
-                <span className="text-[9px] bg-[#E8A02C]/20 text-[#E8A02C] font-mono font-bold px-1.5 py-0.5 rounded-full border border-[#E8A02C]/40">
-                  v1.4.1
+                <h1 className="text-xs font-black tracking-tight font-display">{t("appTitle")}</h1>
+                <span className="text-[9px] bg-[#E8A02C]/20 text-[#E8A02C] font-mono font-bold px-1.5 py-0.2 rounded-full border border-[#E8A02C]/40">
+                  v1.5.0
                 </span>
-                <span className="text-[8px] bg-purple-500/20 text-purple-300 font-mono px-1 py-0.5 rounded border border-purple-400/30">
+                <span className="text-[8px] bg-purple-500/20 text-purple-300 font-mono px-1 py-0.2 rounded border border-purple-400/30">
                   GPT-4o
                 </span>
               </div>
-              <p className="text-[9px] text-[#E8A02C]/90 font-mono tracking-wider">AI DEEP GO SMART PLANNER</p>
+              <p className="text-[8px] text-[#E8A02C]/90 font-mono tracking-wider truncate max-w-[130px]">
+                {t("appSubtitle")}
+              </p>
             </div>
           </div>
           
-          <button
-            onClick={() => {
-              setCustomUrlInput(localStorage.getItem("deepgo_custom_api_url") || "");
-              setShowServerModal(true);
-              testServerConnection();
-            }}
-            className="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 active:scale-95 transition-all px-2.5 py-1 rounded-full font-mono text-[9px] cursor-pointer"
-            title="點擊檢查雲端後端連線狀態與設定"
-          >
-            <span className={`w-1.5 h-1.5 rounded-full ${serverStatus.ok ? "bg-emerald-400 animate-pulse" : "bg-amber-400"}`}></span>
-            <span>{isNativePlatform() ? "APK連網" : "雲端後端"}</span>
-            <span className="text-white/60">⚙️</span>
-          </button>
+          <div className="flex items-center gap-1.5">
+            {/* Multi-language Selector Pills */}
+            <div className="flex items-center bg-white/10 rounded-full p-0.5 border border-white/20 text-[9px] font-bold">
+              <button
+                type="button"
+                onClick={() => setLanguage("zh-TW")}
+                className={`px-1.5 py-0.5 rounded-full transition-all cursor-pointer ${
+                  currentLang === "zh-TW" 
+                    ? "bg-[#E8A02C] text-[#13294B] shadow-2xs font-extrabold" 
+                    : "text-white/70 hover:text-white"
+                }`}
+                title="切換繁體中文"
+              >
+                繁中
+              </button>
+              <button
+                type="button"
+                onClick={() => setLanguage("en")}
+                className={`px-1.5 py-0.5 rounded-full transition-all cursor-pointer ${
+                  currentLang === "en" 
+                    ? "bg-[#E8A02C] text-[#13294B] shadow-2xs font-extrabold" 
+                    : "text-white/70 hover:text-white"
+                }`}
+                title="Switch to English"
+              >
+                EN
+              </button>
+              <button
+                type="button"
+                onClick={() => setLanguage("ja")}
+                className={`px-1.5 py-0.5 rounded-full transition-all cursor-pointer ${
+                  currentLang === "ja" 
+                    ? "bg-[#E8A02C] text-[#13294B] shadow-2xs font-extrabold" 
+                    : "text-white/70 hover:text-white"
+                }`}
+                title="日本語に切り替え"
+              >
+                日
+              </button>
+            </div>
+
+            <button
+              onClick={() => {
+                setCustomUrlInput(localStorage.getItem("deepgo_custom_api_url") || "");
+                setShowServerModal(true);
+                testServerConnection();
+              }}
+              className="flex items-center gap-1 bg-white/10 hover:bg-white/20 active:scale-95 transition-all px-2 py-1 rounded-full font-mono text-[9px] cursor-pointer"
+              title="點擊檢查雲端後端連線狀態與設定"
+            >
+              <span className={`w-1.5 h-1.5 rounded-full ${serverStatus.ok ? "bg-emerald-400 animate-pulse" : "bg-amber-400"}`}></span>
+              <span className="hidden sm:inline">{isNativePlatform() ? "APK" : "後端"}</span>
+              <span className="text-white/70">⚙️</span>
+            </button>
+          </div>
         </header>
 
         {/* Dynamic Inner Tab Viewport content area */}
@@ -683,7 +729,7 @@ export default function App() {
             }`}
           >
             <Compass className={`w-5 h-5 mb-1 ${activeTab === "explore" ? "stroke-[2.5]" : ""}`} />
-            <span className="text-[10px] font-bold">首頁景點</span>
+            <span className="text-[10px] font-bold">{t("tabExplore")}</span>
           </button>
 
           <button
@@ -693,7 +739,7 @@ export default function App() {
             }`}
           >
             <Sparkles className={`w-5 h-5 mb-1 ${activeTab === "planner" ? "text-[#E8A02C]" : ""}`} />
-            <span className="text-[10px] font-bold">AI 智慧規劃</span>
+            <span className="text-[10px] font-bold">{t("tabPlanner")}</span>
             <span className="absolute -top-1 right-3 bg-red-500 text-white font-black text-[7px] w-2.5 h-2.5 rounded-full flex items-center justify-center animate-bounce">
               !
             </span>
@@ -706,7 +752,7 @@ export default function App() {
             }`}
           >
             <Calendar className={`w-5 h-5 mb-1 ${activeTab === "itinerary" ? "stroke-[2.5]" : ""}`} />
-            <span className="text-[10px] font-bold">我的行程</span>
+            <span className="text-[10px] font-bold">{t("tabItinerary")}</span>
           </button>
 
           <button
@@ -716,7 +762,7 @@ export default function App() {
             }`}
           >
             <Users className={`w-5 h-5 mb-1 ${activeTab === "colearn" ? "stroke-[2.5]" : ""}`} />
-            <span className="text-[10px] font-bold">行程共學</span>
+            <span className="text-[10px] font-bold">{t("tabColearn")}</span>
           </button>
 
           <button
@@ -726,7 +772,7 @@ export default function App() {
             }`}
           >
             <Award className={`w-5 h-5 mb-1 ${activeTab === "record" ? "stroke-[2.5]" : ""}`} />
-            <span className="text-[10px] font-bold">學習紀錄</span>
+            <span className="text-[10px] font-bold">{t("tabRecord")}</span>
           </button>
           
         </nav>

@@ -244,7 +244,13 @@ export async function generateGptItineraryPlan(params: ItineraryPlanRequest): Pr
 注意事項：
 1. 每天上午推薦1~2個景點，下午1~2個景點，夜晚推薦合適的夜市、景觀台或特色商圈。
 2. 住宿點、午晚餐推薦應貼合風格【${params.style}】與預算【${params.budget}】。
-3. 景點故事亮點 (highlight) 的文筆風格應配合【${params.expressStyle || "經典"}】。全程繁體中文輸出。`;
+3. 景點故事亮點 (highlight) 的文筆風格應配合【${params.expressStyle || "經典"}】。${
+    params.targetLang === "en"
+      ? "OUTPUT ENTIRELY IN ENGLISH with Traditional Chinese proper names/addresses in parentheses (e.g. 'Dihua Street (迪化街)')."
+      : params.targetLang === "ja"
+      ? "日本語で出力してください。スポット名と住所は繁体字中国語を併記してください。"
+      : "全程繁體中文輸出。"
+  }`;
 
   const systemInstruction = `你是一位對全台灣各縣市（包含台北、新北、基隆、桃園、新竹、苗栗、台中、彰化、南投、雲林、嘉義、台南、高雄、屏東、宜蘭、花蓮、台東、澎湖、金門、馬祖）聊若指掌的頂尖台灣深度導覽與旅程排程專家。你擅長輸出格式標準、無多餘雜質的合法 JSON 資料，注重景點地理相鄰順序、流暢移動與午晚餐小卡推薦。`;
 
@@ -300,4 +306,42 @@ export async function generateGptItineraryPlan(params: ItineraryPlanRequest): Pr
     itinerary: daysArray,
     notes: notes
   };
+}
+
+// Direct OpenAI Article/Story Translation Function
+export async function translateGptArticle(
+  text: string, 
+  targetLang: "zh-TW" | "en" | "ja", 
+  spotName?: string
+): Promise<string> {
+  const apiKey = getOpenAIApiKey();
+  if (!apiKey || targetLang === "zh-TW" || !text) return text;
+
+  const model = getSelectedOpenAIModel();
+  const langLabel = targetLang === "ja" ? "natural polite Japanese (日本語)" : "fluent native English";
+  const sysPrompt = `You are a professional bilingual Taiwan travel and cultural heritage guide. Translate the text into ${langLabel}. Always keep Chinese proper nouns and addresses in parentheses (e.g. "Dihua Street (迪化街)") so navigation in Taiwan is reliable. Return ONLY the translated text.`;
+
+  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${apiKey}`
+    },
+    body: JSON.stringify({
+      model: model,
+      messages: [
+        { role: "system", content: sysPrompt },
+        { role: "user", content: `Spot: ${spotName || "Taiwan Spot"}\n\n${text}` }
+      ],
+      temperature: 0.3,
+      max_tokens: 1200
+    })
+  });
+
+  if (!res.ok) {
+    throw new Error(`OpenAI HTTP ${res.status}`);
+  }
+
+  const data = await res.json();
+  return data?.choices?.[0]?.message?.content?.trim() || text;
 }

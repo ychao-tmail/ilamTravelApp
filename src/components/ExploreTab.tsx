@@ -3,6 +3,7 @@ import { Search, Sparkles, Volume2, BookOpen, Compass, CornerDownRight, Play, Pa
 import { Spot } from "../types";
 import { resolveSpotStory, FeaturedStoryArticle } from "../data/taiwanStories";
 import { apiClient } from "../api/client";
+import { useTranslation } from "../i18n/LanguageContext";
 import { 
   generateGptGuidedStory, 
   getOpenAIApiKey, 
@@ -375,12 +376,18 @@ export default function ExploreTab({
   onClearInitialSpot,
   onUserCountyDetected
 }: ExploreTabProps) {
+  const { currentLang, t, translateArticle } = useTranslation();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedRegion, setSelectedRegion] = useState("📍 附近景點");
   const [selectedTheme, setSelectedTheme] = useState<"歷史背景" | "建築特色" | "在地飲食">("歷史背景");
   const [activeSpot, setActiveSpot] = useState<Spot | null>(null);
   const [currentArticle, setCurrentArticle] = useState<FeaturedStoryArticle | null>(null);
   const [activeTabMode, setActiveTabMode] = useState<"article" | "audio" | "tips">("article");
+
+  // Multi-language translation state for attraction articles
+  const [isTranslatingSpot, setIsTranslatingSpot] = useState(false);
+  const [translatedSpotText, setTranslatedSpotText] = useState<string | null>(null);
+  const [showTranslatedSpot, setShowTranslatedSpot] = useState(false);
 
   // User location for Nearby Spots (with local cache support)
   const [userCoords, setUserCoords] = useState<DetectedLocation>(() => {
@@ -604,17 +611,44 @@ export default function ExploreTab({
     setToastMsg(null);
     setUsedAiModel(null);
     setActiveTabMode(openMode);
+    setTranslatedSpotText(null);
+    setShowTranslatedSpot(currentLang !== "zh-TW");
+
+    // Auto-fetch translation if non-Chinese mode
+    if (currentLang !== "zh-TW") {
+      setIsTranslatingSpot(true);
+      const combined = `${article.articleTitle}\n\n${article.summary}\n\n${article.historyContext}\n\n${article.architectureDetails}\n\n${article.foodCulture}`;
+      translateArticle(combined, `spot_${spot.name}_${theme}`)
+        .then((translated) => {
+          setTranslatedSpotText(translated);
+          setIsTranslatingSpot(false);
+        })
+        .catch(() => {
+          setIsTranslatingSpot(false);
+        });
+    }
 
     // 2. Unlock learning tag and story record
     onUnlockStory(spot.name, theme, article.tag);
   };
 
+  const handleManualTranslateSpot = async () => {
+    if (!activeSpot || !currentArticle) return;
+    setIsTranslatingSpot(true);
+    try {
+      const combined = `${currentArticle.articleTitle}\n\n${currentArticle.summary}\n\n${currentArticle.historyContext}\n\n${currentArticle.architectureDetails}\n\n${currentArticle.foodCulture}`;
+      const translated = await translateArticle(combined, `spot_${activeSpot.name}_${selectedTheme}`);
+      setTranslatedSpotText(translated);
+      setShowTranslatedSpot(true);
+    } finally {
+      setIsTranslatingSpot(false);
+    }
+  };
+
   // Switch theme directly inside reader modal
   const handleSwitchThemeInModal = (theme: "歷史背景" | "建築特色" | "在地飲食") => {
     if (!activeSpot) return;
-    if (window.speechSynthesis) {
-      window.speechSynthesis.cancel();
-    }
+    stopUtterance();
     setIsPlayingAudio(false);
     setAudioProgress(0);
     setSelectedTheme(theme);
@@ -625,6 +659,22 @@ export default function ExploreTab({
     setJustGeneratedSuccess(false);
     setToastMsg(null);
     setUsedAiModel(null);
+    setTranslatedSpotText(null);
+    setShowTranslatedSpot(currentLang !== "zh-TW");
+
+    if (currentLang !== "zh-TW") {
+      setIsTranslatingSpot(true);
+      const combined = `${article.articleTitle}\n\n${article.summary}\n\n${article.historyContext}\n\n${article.architectureDetails}\n\n${article.foodCulture}`;
+      translateArticle(combined, `spot_${activeSpot.name}_${theme}`)
+        .then((translated) => {
+          setTranslatedSpotText(translated);
+          setIsTranslatingSpot(false);
+        })
+        .catch(() => {
+          setIsTranslatingSpot(false);
+        });
+    }
+
     onUnlockStory(activeSpot.name, theme, article.tag);
   };
 
@@ -726,7 +776,9 @@ export default function ExploreTab({
     }
 
     await stopUtterance();
-    const textToSpeak = guideText || currentArticle?.audioScript || "歡迎收聽台灣深度語音導覽。";
+    const textToSpeak = (showTranslatedSpot && translatedSpotText)
+      ? translatedSpotText
+      : (guideText || currentArticle?.audioScript || "歡迎收聽台灣深度語音導覽。");
 
     // Progress estimation ticker
     const estDurationSec = Math.max(8, Math.round(textToSpeak.length * 0.32 * (1 / speechRate)));
@@ -746,7 +798,10 @@ export default function ExploreTab({
         text: textToSpeak,
         rate: speechRate,
         pitch: 1.0,
-        voicePack: selectedVoicePack,
+        voicePack: (showTranslatedSpot && translatedSpotText) 
+          ? (currentLang === "ja" ? "日本語" : "英語播報") 
+          : selectedVoicePack,
+        lang: currentLang === "ja" ? "ja-JP" : currentLang === "en" ? "en-US" : "zh-TW",
         onStart: () => {
           setIsPlayingAudio(true);
         },
@@ -1434,13 +1489,70 @@ export default function ExploreTab({
                     </p>
                   </div>
 
+                  {/* AI Translation Toggle Bar for Foreign Visitors */}
+                  {currentLang !== "zh-TW" && (
+                    <div className="bg-purple-50 border border-purple-200/80 rounded-2xl p-3.5 flex items-center justify-between gap-2 shadow-2xs">
+                      <div className="flex items-center gap-2.5">
+                        <span className="text-xl">🌐</span>
+                        <div>
+                          <span className="text-xs font-bold text-purple-950 font-display block">
+                            {currentLang === "ja" ? "AI 日本語翻訳 (Gemini & GPT)" : "AI English Translation (Gemini & GPT)"}
+                          </span>
+                          <span className="text-[10px] text-purple-600 block">
+                            {showTranslatedSpot ? (currentLang === "ja" ? "日本語訳を表示中（地名・住所は繁体字併記）" : "Viewing English (with Chinese navigation references)") : (currentLang === "ja" ? "原文 (繁体字) を表示中" : "Viewing Original Chinese")}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        {isTranslatingSpot ? (
+                          <span className="text-xs text-purple-600 font-bold animate-pulse flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-xl border border-purple-200">
+                            <span className="w-2 h-2 rounded-full bg-purple-600 animate-ping"></span>
+                            {t("translating")}
+                          </span>
+                        ) : translatedSpotText ? (
+                          <div className="flex items-center bg-white rounded-xl p-0.5 border border-purple-200 text-[10px] font-bold">
+                            <button
+                              type="button"
+                              onClick={() => setShowTranslatedSpot(false)}
+                              className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                                !showTranslatedSpot ? "bg-purple-600 text-white shadow-2xs" : "text-gray-500 hover:text-gray-900"
+                              }`}
+                            >
+                              {t("originalText")}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setShowTranslatedSpot(true)}
+                              className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                                showTranslatedSpot ? "bg-purple-600 text-white shadow-2xs" : "text-gray-500 hover:text-gray-900"
+                              }`}
+                            >
+                              {t("translatedText")}
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={handleManualTranslateSpot}
+                            className="bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold px-3 py-1.5 rounded-xl transition-all shadow-xs cursor-pointer active:scale-95"
+                          >
+                            {t("translateWithAi")}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Quick Action Banner to Audio & AI */}
                   <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/80 p-3.5 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 shadow-xs">
                     <div className="flex items-center gap-2.5">
                       <span className="p-2 bg-[#E8A02C] text-white rounded-xl text-lg shadow-xs">🎧</span>
                       <div>
                         <span className="text-xs font-bold text-gray-900 block font-display">現場走讀想用聽的？</span>
-                        <span className="text-[11px] text-gray-600">預設 Google 語音即開即播，或呼叫 GPT 產生客製化說書詞</span>
+                        <span className="text-[11px] text-gray-600">
+                          {currentLang !== "zh-TW" ? "支援英日雙語 TTS 語音朗讀，現場走讀輕鬆聽" : "預設 Google 語音即開即播，或呼叫 GPT 產生客製化說書詞"}
+                        </span>
                       </div>
                     </div>
                     <div className="flex items-center gap-2 w-full sm:w-auto">
@@ -1452,10 +1564,10 @@ export default function ExploreTab({
                           }
                         }}
                         className="flex-1 sm:flex-initial py-2 px-3.5 bg-[#13294B] hover:bg-[#1E3E62] text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
-                        title="預設直接使用 Google 國語語音朗讀精選原創手稿（免等待、免消耗額度）"
+                        title="預設直接使用 Google 語音朗讀精選原創手稿（免等待、免消耗額度）"
                       >
                         <Play className="w-3.5 h-3.5 fill-white" />
-                        <span>Google 語音播報</span>
+                        <span>語音播報</span>
                       </button>
                       <button
                         onClick={() => {
@@ -1471,44 +1583,66 @@ export default function ExploreTab({
                     </div>
                   </div>
 
-                  {/* Section 1: 文史身世與時代背景 */}
-                  <div className="bg-white p-4.5 rounded-2xl border border-gray-100 shadow-xs space-y-2">
-                    <div className="flex items-center gap-2 border-b border-gray-100 pb-2">
-                      <span className="text-base">🏛️</span>
-                      <h4 className="font-bold text-sm text-gray-900 font-display">
-                        風土身世與歷史脈絡
-                      </h4>
+                  {/* Render Translated Full Article or Traditional 3-Section Article */}
+                  {showTranslatedSpot && translatedSpotText ? (
+                    <div className="bg-white p-5 rounded-2xl border border-purple-200 shadow-xs space-y-3">
+                      <div className="flex items-center justify-between border-b border-gray-100 pb-2.5">
+                        <div className="flex items-center gap-2">
+                          <span className="text-lg">🌐</span>
+                          <h4 className="font-bold text-sm text-gray-900 font-display">
+                            {currentLang === "ja" ? "日本語 深度解説ストーリー" : "English In-Depth Cultural Guide"}
+                          </h4>
+                        </div>
+                        <span className="text-[10px] font-bold text-purple-700 bg-purple-50 px-2.5 py-0.5 rounded-full border border-purple-200">
+                          AI Translated • Cached
+                        </span>
+                      </div>
+                      <div className="text-xs text-gray-700 leading-relaxed whitespace-pre-wrap font-serif space-y-3">
+                        {translatedSpotText}
+                      </div>
                     </div>
-                    <div className="text-xs text-gray-700 leading-relaxed whitespace-pre-wrap font-sans space-y-2">
-                      {currentArticle.historyContext}
-                    </div>
-                  </div>
+                  ) : (
+                    <>
+                      {/* Section 1: 文史身世與時代背景 */}
+                      <div className="bg-white p-4.5 rounded-2xl border border-gray-100 shadow-xs space-y-2">
+                        <div className="flex items-center gap-2 border-b border-gray-100 pb-2">
+                          <span className="text-base">🏛️</span>
+                          <h4 className="font-bold text-sm text-gray-900 font-display">
+                            風土身世與歷史脈絡
+                          </h4>
+                        </div>
+                        <div className="text-xs text-gray-700 leading-relaxed whitespace-pre-wrap font-sans space-y-2">
+                          {currentArticle.historyContext}
+                        </div>
+                      </div>
 
-                  {/* Section 2: 空間構造與建築解密 */}
-                  <div className="bg-white p-4.5 rounded-2xl border border-gray-100 shadow-xs space-y-2">
-                    <div className="flex items-center gap-2 border-b border-gray-100 pb-2">
-                      <span className="text-base">📐</span>
-                      <h4 className="font-bold text-sm text-gray-900 font-display">
-                        空間構造與建築密碼
-                      </h4>
-                    </div>
-                    <div className="text-xs text-gray-700 leading-relaxed whitespace-pre-wrap font-sans space-y-2">
-                      {currentArticle.architectureDetails}
-                    </div>
-                  </div>
+                      {/* Section 2: 空間構造與建築解密 */}
+                      <div className="bg-white p-4.5 rounded-2xl border border-gray-100 shadow-xs space-y-2">
+                        <div className="flex items-center gap-2 border-b border-gray-100 pb-2">
+                          <span className="text-base">📐</span>
+                          <h4 className="font-bold text-sm text-gray-900 font-display">
+                            空間構造與建築密碼
+                          </h4>
+                        </div>
+                        <div className="text-xs text-gray-700 leading-relaxed whitespace-pre-wrap font-sans space-y-2">
+                          {currentArticle.architectureDetails}
+                        </div>
+                      </div>
 
-                  {/* Section 3: 常民舌尖與在地理氣 */}
-                  <div className="bg-white p-4.5 rounded-2xl border border-gray-100 shadow-xs space-y-2">
-                    <div className="flex items-center gap-2 border-b border-gray-100 pb-2">
-                      <span className="text-base">🍜</span>
-                      <h4 className="font-bold text-sm text-gray-900 font-display">
-                        常民生活與尋味指南
-                      </h4>
-                    </div>
-                    <div className="text-xs text-gray-700 leading-relaxed whitespace-pre-wrap font-sans space-y-2">
-                      {currentArticle.foodCulture}
-                    </div>
-                  </div>
+                      {/* Section 3: 常民舌尖與在地理氣 */}
+                      <div className="bg-white p-4.5 rounded-2xl border border-gray-100 shadow-xs space-y-2">
+                        <div className="flex items-center gap-2 border-b border-gray-100 pb-2">
+                          <span className="text-base">🍜</span>
+                          <h4 className="font-bold text-sm text-gray-900 font-display">
+                            常民生活與尋味指南
+                          </h4>
+                        </div>
+                        <div className="text-xs text-gray-700 leading-relaxed whitespace-pre-wrap font-sans space-y-2">
+                          {currentArticle.foodCulture}
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
 

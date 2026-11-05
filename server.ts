@@ -499,12 +499,87 @@ app.post("/api/guided-story", async (req, res) => {
   });
 });
 
+// ENDPOINT: MULTI-LANGUAGE TRANSLATION (Gemini + OpenAI + Local Fallback)
+app.post("/api/translate", async (req, res) => {
+  const { text, targetLang, spotName, context } = req.body;
+  if (!text) {
+    return res.status(400).json({ error: "No text provided to translate" });
+  }
+
+  const langCode = targetLang || "en";
+  if (langCode === "zh-TW") {
+    return res.json({ success: true, text, isAi: false });
+  }
+
+  const langLabel = langCode === "ja" ? "natural Japanese (日本語)" : "fluent, native English";
+  const prompt = `You are an elite bilingual Taiwan travel and cultural heritage translator.
+Translate the following Taiwanese travel guide, cultural background, or culinary article into ${langLabel}.
+
+CRITICAL GUIDELINES:
+1. DUAL-LANGUAGE PROPER NOUNS: Keep original Traditional Chinese spot names, restaurant names, and street addresses in parentheses next to the translation (e.g. "Dihua Street (迪化街)", "Luodong Forestry Culture Park (羅東林業文化園區)", "Braised Pork Rice (滷肉飯)"). This guarantees international travelers can use Google Maps navigation accurately in Taiwan and show names to taxi drivers or shopkeepers.
+2. Maintain cultural richness, historical nuance, and appetizing culinary descriptions.
+3. Return ONLY the translated article text without any markdown fences, chat greetings, or explanatory notes.
+
+Spot/Subject: ${spotName || "Taiwan Cultural Spot"}
+${context ? `Context: ${context}\n` : ""}
+Text to translate:
+${text}`;
+
+  // 1. Try Gemini
+  if (isGeminiEnabled && ai) {
+    try {
+      const result = await generateGeminiWithFallback(prompt, {
+        temperature: 0.3
+      });
+      if (result && result.text) {
+        return res.json({
+          success: true,
+          isAi: true,
+          model: result.model,
+          text: result.text
+        });
+      }
+    } catch (e) {
+      console.warn("Gemini translation failed, trying OpenAI:", e);
+    }
+  }
+
+  // 2. Try OpenAI
+  if (isOpenAiEnabled) {
+    try {
+      const gptText = await generateOpenAICompletion(
+        "You are an expert Taiwan cultural guide translator.",
+        prompt,
+        false
+      );
+      if (gptText) {
+        return res.json({
+          success: true,
+          isAi: true,
+          model: "gpt-4o-mini",
+          text: gptText
+        });
+      }
+    } catch (e) {
+      console.warn("OpenAI translation failed:", e);
+    }
+  }
+
+  // Fallback: return original text
+  return res.json({
+    success: true,
+    isAi: false,
+    text: text
+  });
+});
+
 // ENDPOINT 2: ITINERARY PLANNER
 app.post("/api/itinerary-plan", async (req, res) => {
-  const { districts, days, style, transport, budget, userNotes, county, guideLength, expressStyle, voicePack } = req.body;
+  const { districts, days, style, transport, budget, userNotes, county, guideLength, expressStyle, voicePack, targetLang } = req.body;
   
   const numDays = Number(days) || 3;
   const targetCounty = county || "宜蘭縣";
+  const lang = targetLang || "zh-TW";
   
   // Parse districts from input (could be array or string)
   let targetDistricts: string[] = [];
@@ -516,6 +591,14 @@ app.post("/api/itinerary-plan", async (req, res) => {
   
   if (targetDistricts.length === 0) {
     targetDistricts = targetCounty === "宜蘭縣" ? ["羅東", "冬山", "蘇澳"] : ["市中心", "著名景點", "特色街區"];
+  }
+
+  // Multi-language prompt customization
+  let langInstruction = "全程採用繁體中文輸出。";
+  if (lang === "en") {
+    langInstruction = "The user has chosen ENGLISH (en). You MUST output all itinerary text, highlights, lodging descriptions, and dish highlights in fluent, engaging English. For all proper names (spot titles, restaurant names, street addresses), preserve the Traditional Chinese in parentheses, e.g. 'Dihua Street (迪化街)', 'Linchang Pork Soup (林場肉羹)', so navigation in Taiwan works accurately.";
+  } else if (lang === "ja") {
+    langInstruction = "ユーザーは日本語 (ja) を選択しました。行程の解説、ハイライト、宿泊施設の推薦理由、料理の紹介文はすべて自然で丁寧な日本語 (です・ます調) で出力してください。台湾のスポット名、店名、住所はGoogleマップ導航と現地確認のため、必ず繁体字中国語を併記してください（例：『迪化街（ディーホアジエ）』、『林場肉羹（羅東）』）。";
   }
   
   if (isGeminiEnabled && ai) {
@@ -529,6 +612,7 @@ app.post("/api/itinerary-plan", async (req, res) => {
 - 導覽長度偏好：${guideLength || "中等"}
 - 表達風格偏好：${expressStyle || "經典"}
 - 聽覺配音設定：${voicePack || "專業的主播"}${userNotes ? `\n- 旅客特別備註/需求（如飲食、住宿地點或特殊交通需求等）：${userNotes}` : ""}
+- 語言模式：${langInstruction}
 
 【關鍵要求】：
 1. 里程合理性與移動流暢性：同一天內的景點必須聚集在同一個行政區或相鄰廊道（不要橫跨城鄉折返奔波），計算合理的前後景點間移動距離 (distanceFromPrevKm，通常 1~6 公里) 與交通耗時說明 (travelTimeDesc，如 '車程約 8 分鐘 · 2.5 公里')。
@@ -581,7 +665,7 @@ app.post("/api/itinerary-plan", async (req, res) => {
 1. 每天上午推薦1~2個景點，下午1~2個景點，夜晚推薦合適的夜市、景觀台、特色商圈或漫步點。
 2. 密切配合想去的地區 ${targetDistricts.join("、")} 與所在的目的地城市/區域 ${targetCounty}。
 3. 住宿點、午晚餐推薦應完美貼合團隊風格與當地特色。
-4. 所有景點故事化亮點 (highlight) 的文筆風格，應完美貼合選定的表達風格【${expressStyle || "經典"}】。全程採用繁體中文輸出。`;
+4. 所有景點故事化亮點 (highlight) 的文筆風格，應完美貼合選定的表達風格【${expressStyle || "經典"}】。${langInstruction}`;
 
       const result = await generateGeminiWithFallback(prompt, {
         responseMimeType: "application/json",
@@ -754,7 +838,7 @@ app.post("/api/itinerary-plan", async (req, res) => {
 注意事項：
 1. 每天上午推薦1~2個景點，下午1~2個景點，夜晚推薦合適的夜市、景觀台或特色商圈。
 2. 住宿點、美食推薦應貼合風格【${style}】與預算【${budget}】。
-3. 景點亮點文筆應配合【${expressStyle || "經典"}】風格。全程繁體中文輸出。`;
+3. 景點亮點文筆應配合【${expressStyle || "經典"}】風格。${langInstruction}`;
 
       const sysPrompt = `你是一位對全台灣各縣市聊若指掌的頂尖台灣深度導覽與旅程排程專家。你擅長輸出格式標準、無多餘雜質的合法 JSON 資料，注重景點地理相鄰順序與美食小卡推薦。`;
 

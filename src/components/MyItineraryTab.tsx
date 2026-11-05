@@ -3,6 +3,7 @@ import { CheckSquare, Square, Calendar, Plus, Compass, Trash2, ArrowRight, Corne
 import { DayItinerary, SavedItinerary, MealRecommend } from "../types";
 import { parseFoodRecommendIntoMealCards } from "../data/foodStories";
 import { speakUtterance, stopUtterance } from "../services/nativeTtsService";
+import { useTranslation } from "../i18n/LanguageContext";
 
 const getSpotCoords = (spotName: string): { x: number; y: number; region: string; bg: string } => {
   const name = spotName || "";
@@ -124,6 +125,7 @@ export default function MyItineraryTab({
   onChangeTab,
   onOpenSpotGuide
 }: MyItineraryTabProps) {
+  const { currentLang, t, translateArticle } = useTranslation();
   const [activeDay, setActiveDay] = useState<number>(1);
   const [isMapOpen, setIsMapOpen] = useState<boolean>(false);
   const [activeSpotIndex, setActiveSpotIndex] = useState<number>(0);
@@ -145,6 +147,11 @@ export default function MyItineraryTab({
   const [isPlayingFoodAudio, setIsPlayingFoodAudio] = useState(false);
   const [foodAudioProgress, setFoodAudioProgress] = useState(0);
 
+  // Multi-language translation state for food articles
+  const [isTranslatingFood, setIsTranslatingFood] = useState(false);
+  const [translatedFoodArticle, setTranslatedFoodArticle] = useState<string | null>(null);
+  const [showTranslatedFood, setShowTranslatedFood] = useState(false);
+
   // Stop audio on unmount
   useEffect(() => {
     return () => {
@@ -156,7 +163,39 @@ export default function MyItineraryTab({
     stopUtterance();
     setIsPlayingFoodAudio(false);
     setFoodAudioProgress(0);
+    setTranslatedFoodArticle(null);
+    setShowTranslatedFood(currentLang !== "zh-TW");
     setActiveFoodArticle(meal);
+
+    // Auto-fetch translation if non-Chinese mode
+    if (currentLang !== "zh-TW") {
+      const textToTranslate = meal.article || meal.highlight;
+      if (textToTranslate) {
+        setIsTranslatingFood(true);
+        translateArticle(textToTranslate, `food_${meal.name}`)
+          .then((translated) => {
+            setTranslatedFoodArticle(translated);
+            setIsTranslatingFood(false);
+          })
+          .catch(() => {
+            setIsTranslatingFood(false);
+          });
+      }
+    }
+  };
+
+  const handleManualTranslateFood = async () => {
+    if (!activeFoodArticle) return;
+    const textToTranslate = activeFoodArticle.article || activeFoodArticle.highlight;
+    if (!textToTranslate) return;
+    setIsTranslatingFood(true);
+    try {
+      const translated = await translateArticle(textToTranslate, `food_${activeFoodArticle.name}`);
+      setTranslatedFoodArticle(translated);
+      setShowTranslatedFood(true);
+    } finally {
+      setIsTranslatingFood(false);
+    }
   };
 
   const handleCloseFoodArticle = () => {
@@ -164,6 +203,8 @@ export default function MyItineraryTab({
     setIsPlayingFoodAudio(false);
     setFoodAudioProgress(0);
     setActiveFoodArticle(null);
+    setTranslatedFoodArticle(null);
+    setShowTranslatedFood(false);
   };
 
   const handleToggleFoodAudio = async () => {
@@ -176,7 +217,9 @@ export default function MyItineraryTab({
     }
 
     await stopUtterance();
-    const textToSpeak = activeFoodArticle.audioScript || activeFoodArticle.article || `${activeFoodArticle.name}，招牌推薦為${activeFoodArticle.dish}。${activeFoodArticle.highlight}`;
+    const textToSpeak = (showTranslatedFood && translatedFoodArticle)
+      ? translatedFoodArticle
+      : (activeFoodArticle.audioScript || activeFoodArticle.article || `${activeFoodArticle.name}，招牌推薦為${activeFoodArticle.dish}。${activeFoodArticle.highlight}`);
     const estDurationSec = Math.max(8, Math.round(textToSpeak.length * 0.32));
     let elapsed = 0;
     const interval = setInterval(() => {
@@ -193,7 +236,10 @@ export default function MyItineraryTab({
       await speakUtterance({
         text: textToSpeak,
         rate: 1.0,
-        voicePack: "專業的主播",
+        voicePack: (showTranslatedFood && translatedFoodArticle) 
+          ? (currentLang === "ja" ? "日本語" : "英語播報") 
+          : "專業的主播",
+        lang: currentLang === "ja" ? "ja-JP" : currentLang === "en" ? "en-US" : "zh-TW",
         onStart: () => setIsPlayingFoodAudio(true),
         onEnd: () => {
           clearInterval(interval);
@@ -1078,13 +1124,68 @@ export default function MyItineraryTab({
                 </div>
               </div>
 
+              {/* AI Translation Toggle Bar for Foreign Visitors */}
+              {currentLang !== "zh-TW" && (
+                <div className="bg-purple-50 border border-purple-200/80 rounded-2xl p-3 flex items-center justify-between gap-2 shadow-2xs">
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">🌐</span>
+                    <div>
+                      <span className="text-xs font-bold text-purple-950 font-display block">
+                        {currentLang === "ja" ? "AI 日本語翻訳" : "AI English Translation"}
+                      </span>
+                      <span className="text-[10px] text-purple-600 block">
+                        {showTranslatedFood ? (currentLang === "ja" ? "日本語表示中" : "English Active") : (currentLang === "ja" ? "原文 (繁体字) 表示中" : "Original Chinese")}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    {isTranslatingFood ? (
+                      <span className="text-xs text-purple-600 font-bold animate-pulse flex items-center gap-1.5 px-3 py-1 bg-white rounded-xl border border-purple-200">
+                        <span className="w-2 h-2 rounded-full bg-purple-600 animate-ping"></span>
+                        {t("translating")}
+                      </span>
+                    ) : translatedFoodArticle ? (
+                      <div className="flex items-center bg-white rounded-xl p-0.5 border border-purple-200 text-[10px] font-bold">
+                        <button
+                          type="button"
+                          onClick={() => setShowTranslatedFood(false)}
+                          className={`px-2 py-1 rounded-lg transition-all cursor-pointer ${
+                            !showTranslatedFood ? "bg-purple-600 text-white shadow-2xs" : "text-gray-500 hover:text-gray-900"
+                          }`}
+                        >
+                          {t("originalText")}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowTranslatedFood(true)}
+                          className={`px-2 py-1 rounded-lg transition-all cursor-pointer ${
+                            showTranslatedFood ? "bg-purple-600 text-white shadow-2xs" : "text-gray-500 hover:text-gray-900"
+                          }`}
+                        >
+                          {t("translatedText")}
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={handleManualTranslateFood}
+                        className="bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold px-3 py-1.5 rounded-xl transition-all shadow-xs cursor-pointer active:scale-95"
+                      >
+                        {t("translateWithAi")}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Food In-depth Article Content */}
               <div className="bg-[#FAF8F5] p-4.5 rounded-2xl border border-gray-100/90 shadow-xs space-y-3">
                 <h4 className="font-bold text-sm text-gray-900 flex items-center gap-1.5 font-display">
-                  <span>📖</span> 舌尖上的風土身世與料理精髓
+                  <span>📖</span> {t("foodHistoryStory")}
                 </h4>
                 <div className="text-xs text-gray-700 leading-relaxed space-y-2.5 whitespace-pre-line font-serif">
-                  {activeFoodArticle.article || activeFoodArticle.highlight}
+                  {(showTranslatedFood && translatedFoodArticle) ? translatedFoodArticle : (activeFoodArticle.article || activeFoodArticle.highlight)}
                 </div>
               </div>
 

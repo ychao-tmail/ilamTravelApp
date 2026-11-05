@@ -3,6 +3,7 @@ import { Sparkles, Calendar, Compass, ClipboardList, RefreshCw, CheckCircle, Che
 import { PlannerPreferences, DayItinerary } from "../types";
 import { apiClient } from "../api/client";
 import { generateLocalSmartItinerary } from "../services/localPlannerEngine";
+import { useTranslation } from "../i18n/LanguageContext";
 
 const DESTINATIONS_LIST = [
   "台灣 - 台北市", 
@@ -78,6 +79,7 @@ export default function AiPlannerTab({
   clearPresets,
   detectedCounty
 }: AiPlannerTabProps) {
+  const { currentLang, t } = useTranslation();
   // Mode: 'input' or 'result'
   const [step, setStep] = useState<"input" | "result">("input");
   
@@ -244,7 +246,8 @@ export default function AiPlannerTab({
         userNotes: userNotes,
         guideLength: selectedGuideLength.replace(/[\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDC00-\uDFFF]/g, '').trim(),
         expressStyle: selectedExpressStyle.replace(/[\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDC00-\uDFFF]/g, '').trim(),
-        voicePack: selectedVoicePack.replace(/[\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDC00-\uDFFF]/g, '').trim()
+        voicePack: selectedVoicePack.replace(/[\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDC00-\uDFFF]/g, '').trim(),
+        targetLang: currentLang
       });
       
       if (data && data.success && Array.isArray(data.itinerary) && data.itinerary.length > 0) {
@@ -296,20 +299,20 @@ export default function AiPlannerTab({
           {/* Header */}
           <div className="text-center space-y-1.5 py-2">
             <span className="bg-[#E8A02C]/10 text-[#D2691E] text-xs font-black px-3 py-1 rounded-full uppercase tracking-wider">
-              ✨ AI深旅 DeepGo ． 智慧規劃
+              ✨ DeepGo {t("plannerHeader")}
             </span>
             <h2 className="text-xl font-extrabold text-[#13294B] font-display">
-              告訴我你想去哪裡，AI 幫你排台灣行程
+              {t("plannerHeader")}
             </h2>
             <p className="text-xs text-gray-400 max-w-sm mx-auto">
-              任選台灣熱門縣市、自訂城鎮景點與私房祕境，為您貼心定制兼具歷史風土與特色美食的故事深度導覽。
+              {t("plannerSub")}
             </p>
           </div>
 
           {/* County / Destination Select Selector */}
           <div className="space-y-2 bg-white p-4 rounded-2xl border border-gray-100 shadow-xs">
             <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block">
-              🗺️ 選擇旅遊國家 / 區域 / 城市
+              🗺️ {t("selectCounty")}
             </label>
             <select
               value={selectedCounty}
@@ -711,7 +714,7 @@ export default function AiPlannerTab({
             className="w-full bg-[#13294B] hover:bg-[#0c1c38] text-white rounded-2xl py-3.5 text-xs font-extrabold flex items-center justify-center gap-2 shadow-md transition-all active:scale-[0.99] mt-2 cursor-pointer"
           >
             <Sparkles className="w-4 h-4 text-[#E8A02C] animate-pulse" />
-            ✨ 智啟 DeepGo 台灣專屬旅遊規劃
+            {isLoading ? t("generatingTrip") : `✨ ${t("generateTripBtn")}`}
           </button>
         </div>
       ) : (

@@ -56,6 +56,7 @@ export interface GuidedStoryRequest {
   lengthStyle?: string;
   voiceStyle?: string;
   voiceTone?: string;
+  targetLang?: "zh-TW" | "en" | "ja";
 }
 
 export interface GuidedStoryResponse {
@@ -79,6 +80,7 @@ export interface ItineraryPlanRequest {
   guideLength?: string;
   expressStyle?: string;
   voicePack?: string;
+  targetLang?: "zh-TW" | "en" | "ja";
 }
 
 export interface ItineraryPlanResponse {
@@ -324,5 +326,40 @@ export const apiClient = {
       itinerary: localResult.itinerary,
       notes: `${localResult.notes}\n(✨ 已啟用深旅離線原生智慧引擎，無需連網隨時隨地秒開完整排程！)`
     };
+  },
+
+  async translateText(text: string, targetLang: "zh-TW" | "en" | "ja", spotName?: string): Promise<string> {
+    if (!text || targetLang === "zh-TW") {
+      return text;
+    }
+
+    const baseUrl = getApiBaseUrl();
+    try {
+      const endpoint = `${baseUrl || ""}/api/translate`;
+      const res = await fetchWithTimeout(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, targetLang, spotName })
+      }, 5000);
+      if (res.ok) {
+        const json = await res.json();
+        if (json && json.text) {
+          return json.text;
+        }
+      }
+    } catch (e) {
+      console.warn("Server translate call failed, checking direct GPT:", e);
+    }
+
+    // Direct OpenAI translation fallback if key exists
+    try {
+      const { translateGptArticle } = await import("../services/gptService");
+      const gptResult = await translateGptArticle(text, targetLang, spotName);
+      if (gptResult) return gptResult;
+    } catch (e) {
+      console.warn("Direct GPT translation failed:", e);
+    }
+
+    return text;
   }
 };
